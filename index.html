@@ -1,602 +1,146 @@
-<html class="objectfit object-fit"><script src="news_files/sdk.js" async="" crossorigin="anonymous"></script><script type="text/javascript" async="" src="news_files/analytics.js"></script><script id="facebook-jssdk" src="news_files/sdk(1).js"></script><script type="text/javascript" async="" src="news_files/recaptcha__ru.js"></script><script async="" src="news_files/gtm.js"></script><script>
-    window[Symbol.for('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon')] = new (class PostClient {
-    constructor(name, destination) {
-        this.name = name;
-        this.destination = destination;
-        this.serverListeners = {};
-        this.bgRequestsListeners = {};
-        this.bgEventsListeners = {};
-        window.addEventListener('message', (message) => {
-            const data = message.data;
-            const isNotForMe = !(data.destination && data.destination === this.name);
-            const hasNotEventProp = !data.event;
-            if (isNotForMe || hasNotEventProp) {
-                return;
-            }
-            if (data.event === 'MARIO_POST_SERVER__BG_RESPONSE') {
-                const response = data.args;
-                if (this.hasBgRequestListener(response.requestId)) {
-                    try {
-                        this.bgRequestsListeners[response.requestId](response.response);
-                    }
-                    catch (e) {
-                        console.log(e);
-                    }
-                    delete this.bgRequestsListeners[response.requestId];
-                }
-            }
-            else if (data.event === 'MARIO_POST_SERVER__BG_EVENT') {
-                const response = data.args;
-                if (this.hasBgEventListener(response.event)) {
-                    try {
-                        this.bgEventsListeners[data.id](response.payload);
-                    }
-                    catch (e) {
-                        console.log(e);
-                    }
-                }
-            }
-            else if (this.hasServerListener(data.event)) {
-                try {
-                    this.serverListeners[data.event](data.args);
-                }
-                catch (e) {
-                    console.log(e);
-                }
-            }
-            else {
-                console.log(`event not handled: ${data.event}`);
-            }
-        });
-    }
-    emitToServer(event, args) {
-        const id = this.generateUIID();
-        const message = {
-            args,
-            destination: this.destination,
-            event,
-            id,
-        };
-        window.postMessage(message, location.origin);
-        return id;
-    }
-    emitToBg(bgEventName, args) {
-        const requestId = this.generateUIID();
-        const request = { bgEventName, requestId, args };
-        this.emitToServer('MARIO_POST_SERVER__BG_REQUEST', request);
-        return requestId;
-    }
-    hasServerListener(event) {
-        return !!this.serverListeners[event];
-    }
-    hasBgRequestListener(requestId) {
-        return !!this.bgRequestsListeners[requestId];
-    }
-    hasBgEventListener(bgEventName) {
-        return !!this.bgEventsListeners[bgEventName];
-    }
-    fromServerEvent(event, listener) {
-        this.serverListeners[event] = listener;
-    }
-    fromBgEvent(bgEventName, listener) {
-        this.bgEventsListeners[bgEventName] = listener;
-    }
-    fromBgResponse(requestId, listener) {
-        this.bgRequestsListeners[requestId] = listener;
-    }
-    generateUIID() {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-            const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        });
-    }
-})('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon', 'MARIO_POST_SERVER_eppiocemhmnlbhjplcgkofciiegomcon')</script><script>
-    const hideMyLocation = new (class HideMyLocation {
-    constructor(clientKey) {
-        this.clientKey = clientKey;
-        this.watchIDs = {};
-        this.client = window[Symbol.for(clientKey)];
-        const getCurrentPosition = navigator.geolocation.getCurrentPosition;
-        const watchPosition = navigator.geolocation.watchPosition;
-        const clearWatch = navigator.geolocation.clearWatch;
-        const self = this;
-        navigator.geolocation.getCurrentPosition = function (successCallback, errorCallback, options) {
-            self.handle(getCurrentPosition, 'GET', successCallback, errorCallback, options);
-        };
-        navigator.geolocation.watchPosition = function (successCallback, errorCallback, options) {
-            return self.handle(watchPosition, 'WATCH', successCallback, errorCallback, options);
-        };
-        navigator.geolocation.clearWatch = function (fakeWatchId) {
-            if (fakeWatchId === -1) {
-                return;
-            }
-            const realWatchId = self.watchIDs[fakeWatchId];
-            delete self.watchIDs[fakeWatchId];
-            return clearWatch.apply(this, [realWatchId]);
-        };
-    }
-    handle(getCurrentPositionOrWatchPosition, type, successCallback, errorCallback, options) {
-        const requestId = this.client.emitToBg('HIDE_MY_LOCATION__GET_LOCATION');
-        let fakeWatchId = this.getRandomInt(0, 100000);
-        this.client.fromBgResponse(requestId, (response) => {
-            if (response.enabled) {
-                if (response.status === 'SUCCESS') {
-                    const position = this.map(response);
-                    successCallback(position);
-                }
-                else {
-                    const error = this.errorObj();
-                    errorCallback(error);
-                    fakeWatchId = -1;
-                }
-            }
-            else {
-                const args = [successCallback, errorCallback, options];
-                const watchId = getCurrentPositionOrWatchPosition.apply(navigator.geolocation, args);
-                if (type === 'WATCH') {
-                    this.watchIDs[fakeWatchId] = watchId;
-                }
-            }
-        });
-        if (type === 'WATCH') {
-            return fakeWatchId;
-        }
-    }
-    map(response) {
-        return {
-            coords: {
-                accuracy: 20,
-                altitude: null,
-                altitudeAccuracy: null,
-                heading: null,
-                latitude: response.latitude,
-                longitude: response.longitude,
-                speed: null,
-            },
-            timestamp: Date.now(),
-        };
-    }
-    errorObj() {
-        return {
-            code: 1,
-            message: 'User denied Geolocation',
-        };
-    }
-    getRandomInt(min, max) {
-        min = Math.ceil(min);
-        max = Math.floor(max);
-        return Math.floor(Math.random() * (max - min + 1)) + min;
-    }
-})('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon')
-  </script><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><script type="text/javascript">
-    var thisDomain = '';
-    if (thisDomain.length > 0) {
-        document.domain = thisDomain;
-    }
-</script>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 
+<!doctype html>
+<html>
+<head>
+	<title>Semi di Chia: proprietà, uso, controindicazioni e dove trovarli | bellezza e salutee</title>
+	<meta charset="utf-8">
+<meta name="description" content="Semi di Chia: proprietà, uso, controindicazioni e dove trovarli" />
+<meta name="keywords" content="Semi di Chia: proprietà, uso, controindicazioni e dove trovarli" />
+	<meta name="author" content="codetomake.com">
+	<link type="text/css" rel="stylesheet" href="css/style.css">
+	<link rel="stylesheet" href="css/font-awesome-4.7.0/css/font-awesome.min.css">
+	
+	
+</head>
+<body  id="FqBUygQlyux2Lq1">
+<header class="header"  id="XnYroONCZQ57BBo">
+<div class="top"  id="LeXrp1Lbr4BN">
 
-    
-        <title>Nepečené s kakaem - Recepty</title>
+<div class="social">
+	<a href="#"><i class="fa fa-facebook-square fa-2x" aria-hidden="true" id="kX4v7RTChU"></i></a>
+	<a href="#"><i class="fa fa-twitter-square fa-2x" aria-hidden="true" id="ZdPxGXMU"></i></a>
+	<a href="#"><i class="fa fa-pinterest-square fa-2x" aria-hidden="true" id="xbNErgvcgqDGpDz"></i></a>
+	<a href="#"><i class="fa fa-google-plus-square fa-2x" aria-hidden="true" id="25j41Y6RjCFtZwK"></i></a>
+	<a href="#"><i class="fa fa-linkedin-square fa-2x" aria-hidden="true" id="FNtd1zN3prLtE"></i></a>
+</div>
 
-<meta property="og:site_name" content="Sbírka receptů">
-<meta property="og:title" content="Helenčina sbírka receptů ~ Nepečené cukroví s kakaem">
-<meta property="og:description" content="37. RUMOVÁ ČOKOLÁDA:
-250 g Omega, 200 g moučkového
- cukru, 80 g sušeného mléka, 40 g kakaa, 2 lžíce rumu, 1 vanilkový cukr. Všechny suroviny rozehřejeme ve vodní lázni a plníme do formiček vypláchnutých vodou.
-36. OŘECHOVÁ ČOKOLÁDA:
-250 g Omega, 250 g moučkového cukru, 100 g kakaa, 40 g mletých o...">
-<meta property="og:image:width" content="1280">
-<meta property="og:image:height" content="1280">
-<meta property="og:updated_time" content="2020-06-23T13:38:08.1321929Z">
-<meta property="og:type" content="article">
-<meta name="format-detection" content="telephone=no">
+<div class="search"  id="nNUiX5nS">
+<form method="post"  id="GbfYCdd">
+<input type="text" name="keyword" placeholder="Search...">
+<input type="submit" value="search">
+</form>
+</div>
 
-<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, user-scalable=no">
-<meta http-equiv="X-UA-Compatible" content="IE=edge">
-<meta name="description" content="37. RUMOVÁ ČOKOLÁDA:
-250 g Omega, 200 g moučkového
- cukru, 80 g sušeného mléka, 40 g kakaa, 2 lžíce rumu, 1 vanilkový cukr. Všechny suroviny rozehřejeme ve vodní lázni a plníme do formiček vypláchnutých vodou.
-36. OŘECHOVÁ ČOKOLÁDA:
-250 g Omega, 250 g moučkového cukru, 100 g kakaa, 40 g mletých o...">
-        <link rel="stylesheet" type="text/css" href="news_files/36840710.design.v1590393210.css">
-<link rel="stylesheet" type="text/css" href="news_files/base.css">
-<link rel="stylesheet" type="text/css" href="news_files/rowsconcept.css">
-<link rel="stylesheet" type="text/css" href="news_files/somelinks.css">
-<link rel="stylesheet" type="text/css" href="news_files/footerlayout5.css">
-<link rel="stylesheet" type="text/css" href="news_files/quilljs.css">
-<link rel="stylesheet" type="text/css" href="news_files/fontawesome-all.css">
+</div>
+<div class="head" id="1XxotMOnhPcb">
+<a href="#" class="logo" alt="codetomake.com" title="codetomake.com">
+<em>Codetomake.com</em>
+</a>
 
-<link rel="stylesheet" type="text/css" href="news_files/ionicons.min.css">
-        <script type="text/javascript" src="news_files/FrontendAppLocalePage.aspx"></script><script>(function inject() {
-        var open = XMLHttpRequest.prototype.open;
+<img src="img/banner-468-60.jpg" width="468" height="60" alt="codetomake.com" title="codetomake.com">
 
-        XMLHttpRequest.prototype.open = function () {
-          this.requestMethod = arguments[0];
-          open.apply(this, arguments);
-        };
+</div>
+<nav id="ifUHfVD">
+	<ul>
+		<li id="kHzt4miAornX"><a href="index.html" class="active">Home</a></li>
+		<li id="hAsbn1xMW6bxX"><a href="#">Portfolio</a></li>
+		<li id="NlueEyJabEJ"><a href="#">Articles</a></li>
+		<li id="Q4voJ7rbMIRule"><a href="terms.html">Terms and Conditions</a></li>
+		<li id="enZJrQc3"><a href="photo.html">Photo gallery</a></li>
+		<li id="UUnHvGPsHE"><a href="contact.html">Contacts</a></li>
+		<li id="Z5RXXncMIyE4"><a href="privacy-policy.html">Privacy policy</a></li>
+	</ul>
+</nav>
+</header>
 
-        var send = XMLHttpRequest.prototype.send;
+<section class="slider">
+<div class="inner" id="jjYxxCqJI52Q">
+<img src="img/slider1.jpg" width="960" height="171">
+</div>
+</section>
 
-        XMLHttpRequest.prototype.send = function () {
-          var onreadystatechange = this.onreadystatechange;
+<div class="main" id="vdV4DmQkjKnzZ">
+<section class="col-main">
+<h1 id="CMfq1CyMwnGSEt">Semi di Chia: proprietà, uso, controindicazioni e dove trovarli</h1> 2021.01.31 12:24
 
-          this.onreadystatechange = function () {
-            function GenerateQuickId() {
-              var randomStrId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-              return randomStrId.substring(0, 22);
-            }
+<p>
 
-            try {
-              if (this.readyState === 4) {
-                var id = 'detector';
-                var mes = {
-                  posdMessageId: 'PANELOS_MESSAGE',
-                  posdHash: GenerateQuickId(),
-                  type: 'VIDEO_XHR_CANDIDATE',
-                  from: id,
-                  to: id.substring(0, id.length - 2),
-                  content: {
-                    requestMethod: this.requestMethod,
-                    url: this.responseURL,
-                    type: this.getResponseHeader('content-type'),
-                    content: this.response
-                  }
-                };
-                window.postMessage(mes, '*');
-              }
-            } catch (e) {}
+				<center><img src="img/c935cbf3cadb0b1cdb3f52034d3e27b5.jpg" width="50%"   id="XXZVrdN"></center><br><br><i> </i> <span> <i> </i> </span> <span> <i> </i> </span> <span> <i> </i> </span> <span> <i> </i> </span> <span> <i> </i> </span> <i> </i> Alimentazione<i> </i> Dieta e salute Proprietà degli alimenti Come cucinare sano Dimagrire Ricette Salute Rimedi<i> </i> Benessere e salute Prodotti erboristici Bellezza<i> </i> Consigli di bellezza Cosmetici naturali Trattamenti fai-da-te Stile di vita <i> </i> <span> ViverSano.net</span> Alimentazione Dieta e salute Proprietà degli alimenti Come cucinare sano Dimagrire Ricette Salute Rimedi Benessere e salute Prodotti erboristici Bellezza Consigli di bellezza Cosmetici naturali Trattamenti fai-da-te Stile di vita <i> </i> <i> </i> <span> Home </span> <i> </i> <span> Alimentazione </span> <i> </i> <span> Proprietà degli alimenti </span> <i> </i> <span> Semi di chia: piccolo ma potente supercibo</span> <h1> Semi di chia: piccolo ma potente supercibo</h1> Scritto da: Dott.ssa Alessandra Esposito - <p> Ultima modifica:14 Maggio 2020</p> <i> </i> <span> 225322</span> <i> </i> 71 <h2> Ricchi di proteine, Omega-3, fibre e molecole ad azione antiossidante, i semi di chia sono l’alleato perfetto per mantenersi in salute e inoltre ci aiutano nella lotta contro il diabete, patologie cardiovascolari e cancro!</h2> Valori nutrizionali Proprietà dei semi di chia Benefici dei semi di chia Come si usano e quanti mangiarne Controindicazioni ed effetti collaterali Dove comprare i semi di chia <p> I <strong> semi di chia</strong> sono dei piccoli, piatti e ovali semini ricchissimi di <strong> proprietà</strong> . Sono generalmente di colore grigio-nero e rappresentano le sementi della Salvia Hispanica , una pianta floreale estremamente comune nelle zone del centro e del sud America, in particolare in Messico e Guatemala, dove hanno costituito il cibo di base di antiche popolazioni come Atzechi e Maya. </p> <p> La loro peculiarità? Sono estremamente ricchi di fibre, acidi grassi “buoni” della serie Omega-3 , proteine e presentano anche buoni livelli di minerali come fosforo e calcio e molecole antiossidanti!</p> Valori nutrizionali per 100g di semi di chia: Kcal 486 Proteine 16,5g Carboidrati 42,1g Grassi 30,7g di cui saturi 3,33g di cui monoinsaturi 2,31g di cui polinsaturi 23,67g Fibre 34,4g <h2> Proprietà dei semi di chia</h2> <p> Vediamo ora nel dettaglio quali sono i potenziali effetti positivi sulla salute dovuti al consumo regolare di semi di chia.</p> <h3> ✓ Alto contenuto di fibre</h3> <p> Semplicemente leggendo i <strong> valori nutrizionali dei semi di chia</strong> salta subito all’occhio come siano una straordinaria fonte di fibra.<br/> <strong> Ma a cosa serve la fibra?</strong> <br/> È molto importante garantirci il giusto apporto quotidiano di fibre, che si aggira intorno ai 30g, in quanto presentano 3 fondamentali funzioni sul nostro organismo:</p> Gonfiandosi nello stomaco <strong> aumentano il senso di sazietà</strong> , impedendoci di assumere pasti troppo abbondanti, soprattutto in calorie; <strong> Migliorano il transito intestinale</strong> ; Costituiscono una sorta di filtro per <strong> ridurre l’assorbimento</strong> di una quota di zuccheri semplici e di grassi, soprattutto colesterolo. <p> Le <strong> fibre</strong> maggiormente presenti nei <strong> semi di chia</strong> sono quelle insolubili (95% sul totale) e diversi studi hanno dimostrato come il loro consumo sia associato a un minor rischio di sviluppare il diabete . Inoltre, una parte delle fibre insolubili possono essere fermentate nell&#8217;intestino promuovendo la formazione di acidi grassi a catena corta, migliorando in questo modo la <strong> salute del colon</strong> .</p> <p> Se provate a immergere un cucchiaino di semi di chia in acqua, noterete subito quanto liquido siano in grado di trattenere; per questa ragione possono essere considerati come delle “piccole spugnette” che gonfiandosi, aumentano il volume del cibo a livello del tratto digestivo, determinando un maggiore senso di <strong> sazietà</strong> e una minor assunzione di <strong> calorie</strong> !</p> Leggi anche: Semi di chia per dimagrire: come usarli per ottenere benefici <h3> ✓ Alto contenuto di Omega-3</h3> <p> Altra <strong> proprietà dei semi di chia</strong> è il loro contenuto di <strong> Omega-3</strong> , acidi grassi essenziali chiamati anche “buoni” che è fondamentale assumere nella nostra alimentazione in quanto aiutano a ridurre i livelli di trigliceridi, mantenendo in salute il cuore.</p> <p> Hanno un potente effetto <strong> antinfiammatorio</strong> , sono quindi utili in tutte quelle patologie in cui l’infiammazione fa da padrona come ipotiroidismo, ipercolesterolemia, diabete di tipo 2, gotta.. e sono inoltre utili a preservare la memoria, mantenendo giovane il cervello!</p> <p> Circa il 75% dei grassi di cui sono composti i semi di chia è rappresentato dall’acido alfa linolenico, anche detto ALA, un grasso che fa parte della famiglia degli Omega-3 e questo alto contenuto incorona i semi di chia come la <strong> miglior fonte vegetale di Omega-3</strong> , superando addirittura i semi di lino !</p> <p> Sapevate che è molto importante il <strong> rapporto di Omega-6/Omega-3</strong> assunto con l’alimentazione? Attualmente nella nostra dieta assumiamo troppi Omega-6, la cui fonte sono principalmente gli oli vegetali, a scapito degli Omega-3. Molti studi hanno evidenziato come un rapporto ideale di 2,5-4/1 di Omega-6 e Omega-3, ridurrebbe il rischio di sviluppare svariate patologie come quelle cardiovascolari, tumori, patologie infiammatorie e morte prematura.</p> <p> La cosa importante da ricordare è che l’ALA costituisce il <strong> precursore degli Omega-3</strong> a catena lunga che ritroviamo nel pesce (EPA e DHA) e ha bisogno di essere convertito nelle sue forme attive prima di poter essere utilizzato dall’organismo, processo che spesso è inefficiente. Per questo motivo il consiglio è quello di scegliere un’<strong> alimentazione varia</strong> che comprenda anche prodotti ittici ricchi di Omega-3 biodisponibile come il salmone, il tonno, lo sgombro e il pesce azzurro.</p> <p> <strong> E per chi segue una dieta vegana, a chi non piace il pesce o non lo assume per scelta?</strong> <br/> Oltre ai semi di chia ci sono altre fonti vegetali di Omega-3 (ALA) che, per chi non consuma il pesce, è necessario assumere con regolarità:</p> Olio di lino e/o semi di lino (rapporto Omega-6/Omega-3 di 1:4) Olio di canapa (rapporto Omega-6/Omega-3 di 3:1, ottimale per prevenire diverse patologie) Noci secche (6,21g/100g) Rosmarino secco (6,20g/100g) Noci fresche (5,65g/100g) Olio di germe di grano (5,30g/100g) Origano secco (4,20g/100g) Farina di soia (1,66g/100g) <h3> ✓ Fonte di proteine vegetali</h3> <p> I semi di chia contengono tutti gli <strong> aminoacidi essenziali</strong> e un quantitativo molto più elevato di proteine rispetto ai cereali (19%), caratteristica che determina un maggior potere saziante. Sono quindi un’ottima fonte di proteine vegetali e, inoltre, non contengono glutine.</p> <p> </p> <h3> ✓ I micronutrienti dei semi di chia</h3> <p> I <strong> semi di chia</strong> forniscono anche diversi minerali mentre il contenuto di vitamine è abbastanza carente. Vediamo cosa racchiudono questi piccoli ma potenti semi:</p> <strong> Manganese</strong> : svolge un’importante ruolo anti-invecchiamento. È coinvolto nell’attivazione di enzimi e vitamine, nella sintesi di colesterolo, proteine e carboidrati e nel normalizzare la produzione degli ormoni. Agisce sullo sviluppo e sulla crescita e sembra abbia un ruolo positivo in patologie come diabete, sclerosi multipla, schizofrenia e nel favorire la fecondazione; <strong> Fosforo</strong> : è l’elemento strutturale di denti, ossa e cellule e supporta il sistema immunitario; <strong> Rame</strong> : partecipa alla formazione dell’emoglobina (proteina specializzata nel trasportare l’ossigeno nel sangue) favorendo l’utilizzo del ferro. Supporta la salute di pelle, unghie e capelli ed è fondamentale per le funzioni nervose e nella costruzione di ossa e tessuto connettivo; <strong> Selenio</strong> : è un antiossidante naturale che agisce in sinergia con la vitamina E, proteggendoci dai danni causati dall’ azione dei radicali liberi . <strong> Ferro</strong> : essenziale per la formazione dell’emoglobina. L’assorbimento di ferro è favorito dalla vitamina C, dal calcio e dal rame, viene ridotto invece dal latte, dal tè e dal caffè. <strong> Magnesio</strong> : svolge un ruolo importante nelle contrazioni muscolari, nel funzionamento del sistema nervoso e per regolare l’equilibrio idro-salino. <strong> Calcio</strong> : è il minerale più abbondante nel nostro organismo, essenziale per le ossa, i muscoli e i nervi. <p> I <strong> semi di chia</strong> sono inoltre ricchi di diversi antiossidanti come la quercitina, il canferolo, l’acido caffeico e l’acido clorogenico, che agiscono proteggendo il nostro organismo dai danni cellulari causati dai radicali liberi. Sono inoltre fonte di tutti gli <strong> aminoacidi essenziali</strong> .</p> <p> </p> <h2> Benefici dei semi di chia</h2> <p> Vediamo ora in sintesi tutti i <strong> benefici dei semi di chia</strong> :</p> <strong> Aumento dei livelli di Omega-3</strong> : i benefici nutrizionali derivati dall’assunzione di cibi contenenti grassi insaturi Omega-3 sono stati riscontrati in diverse patologie ma in particolare nel diabete, in quelle cardiache, nell’artrite e nel cancro; <strong> Miglioramento dei livelli di zucchero nel sangue</strong> : gli studi effettuati sugli animali hanno dimostrato che i semi di chia riducono l’insulino-resistenza e migliorano i livelli di glicemia, entrambi fattori di rischio per lo sviluppo di <strong> sindrome metabolica</strong> , diabete di tipo 2 e <strong> malattie cardiache</strong> ; <strong> Riduzione della pressione sanguigna</strong> : la pressione elevata è il maggior fattore di rischio per numerose patologie come l’infarto. Diversi studi hanno evidenziato come il consumo di semi di chia sia utile nel favorire la riduzione della pressione sanguigna in individui che presentano ipertensione arteriosa; <strong> Aumento dell’apporto di fibre</strong> : solo 2 cucchiai di semi di chia forniscono 11 grammi di fibre che, come abbiamo visto, sono utili a migliorare la salute dell’intestino e a ridurre il rischio di sviluppare diverse patologie <strong> Fonte di antiossidanti:</strong> come abbiamo detto sopra, i semi di chia sono una fonte naturale di sostanze antiossidanti che aiutano a combattere l&#8217;invecchiamento e i radicali liberi. <h2> Semi di chia: quanti mangiarne e come si usano</h2> <p> Il quantitativo medio consigliato per ottenere i benefici descritti sopra è circa <strong> 5 grammi al giorno di semi di chia</strong> , corrispondenti a circa un cucchiaino.</p> <p> Ci sono diversi modi per utilizzare i semi di chia . Sicuramente il più semplice è quello di consumarli crudi, messi ad esempio sull&#8217;insalata, nelle macedonie di frutta o nello yogurt, anche a <strong> colazione</strong> . Data la loro capacità idrofila, prima di <strong> consumare semi di chia crudi</strong> (ad esempio nell&#8217;insalata) si consiglia di lasciarli in ammollo per almeno 10/15 minuti, per evitare disidratazione o senso di sete successiva al loro consumo.</p> <p> Si possono poi preparare numerose ricette a base di questi semi, una delle più diffuse è il <strong> chia pudding</strong> . Se volete provare a farlo a casa, vi invitiamo a leggere: Chia pudding: 3 ricette fai da te . </p> <p> Per <strong> conservare i semi di chia</strong> è bene seguire le indicazioni riportate sulla confezione acquistata. In linea generale, l&#8217;importante è <strong> tenerli al riparo dalla luce del sole</strong> , in un luogo fresco e asciutto. Con il passare del tempo non ci sarà alcuna alterazione del gusto e qualità degli stessi.</p> <h2> Controindicazioni dei semi di chia</h2> <p> Per quanto riguarda le <strong> controindicazioni</strong> , nel 2019, l&#8217;EFSA (Autorità europea per la sicurezza alimentare) ha pubblicato un testo dove dichiara che il consumo di semi di chia non è correlato con effetti avversi, salvo problemi di allergenicità individuale.</p> <h2> Dove trovare i semi di chia</h2> <p> <strong> I semi di chia si trovano</strong> facilmente nei negozi di <strong> alimenti biologici</strong> e in alcuni <strong> supermercati</strong> . Per una scelta ancora più vasta, potete comprare i semi di chia online. In ogni caso, vi consigliamo di scegliere <strong> prodotti biologici</strong> e senza additivi aggiunti. Il prezzo è piuttosto contenuto e varia dai 2 ai 5 euro per una confezione da circa 250 gr. Confezioni più grandi possono avere prezzi ancora più convenienti. Se lo preferite, infine, esistono in commercio anche prodotti da forno con semi di chia, per beneficiare di questi piccoli semini consumando anche uno snack gustoso. In questo caso è consigliabile acquistare prodotti quanto più naturali possibile.</p> <h3> Semi di Chia: dove comprarli online</h3> <h4> Semi di Chia Bio 150gr</h4> <p> I preziosi chicchi sono un concentrato unico di micro e macro nutrienti, come gli acidi grassi essenziali omega 3, fibre e minerali importanti per la salute.</p> Acquista <h4> Semi di chia Bio 500 gr</h4> <p> Semi di chia biologici in conveniente confezione da 500 gr. I semi di chia o Salvia Hispanica possono essere consumati come snack o in aggiunta ad insalate, cereali o yogurt.</p> Acquista Leggi anche:</p> 10 ricette veloci con i semi di chia Semi di chia: come inserirli nella dieta e beneficiarne ogni giorno Semi di zucca: proprietà nutrizionali, benefici e controindicazioni Semi di girasole: le proprietà benefiche <strong> Bibliografia</strong> </p> Schulze MB, Schulz M et al. &#8220;Fiber and magnesium intake and incidence of type 2 diabetes: a prospective study and meta-analysis.&#8221; Arch Intern Med. 2007 May 14;167(9):956-65. Simopoulos AP. &#8220;The importance of the ratio of omega-6/omega-3 essential fatty acids.&#8221; Biomed Pharmacother. 2002 Oct;56(8):365-79. Chicco AG, D&#8217;Alessandro ME, Hein GJ, Oliva ME, Lombardo YB. &#8220;Dietary chia seed (Salvia hispanica L.) rich in alpha-linolenic acid improves adiposity and normalises hypertriacylglycerolaemia and insulin resistance in dyslipaemic rats.&#8221; Br J Nutr. 2009 Jan;101(1):41-50. doi: 10.1017/S000711450899053X. Epub 2008 May 20. Hai letto: Semi di chia: piccolo ma potente supercibo <span> TAGS</span> Semi di chia Semi oleosi <i> </i> Facebook <i> </i> Twitter <i> </i> Pinterest <i> </i> WhatsApp <i> </i> <span> Dott.ssa Alessandra Esposito </span> La Dott.ssa Alessandra esposito è biologa nutrizionista laureata in Scienze Biologiche con 110 e lode presso l’Università degli studi di Pavia, con master di specializzazione in Nutrizione Umana e Alimentazione e il Master in Nutrizione Culinaria. <span> <i> </i> </span> <span> <i> </i> </span> <span> <i> </i> </span> <span> </span> <span> <span> </span> </span> <span> </span> <h4> <span> 71 COMMENTI</span> </h4> Stefano Balestri 12 Ottobre 2020 at 13:41 <p> Salve,<br/> i Semi di Chia contengono Ossalati (Acido Ossalico ) ?<br/> Grazie</p> Rispondi Dott.ssa Stefania Cocolo 13 Novembre 2020 at 19:11 <p> Buongiorno Stefano, come la maggior parte dei semi oleosi anche i semi di chia contengono ossalati.</p> Rispondi rosaaria adonna 9 Marzo 2020 at 11:51 <p> salve vorrei saper se la chia contiene zinco.Grazie</p> Rispondi giuseppa 6 Novembre 2019 at 09:13 <p> Salve, sto facendo terapia ormonale con letrozolo, per k mammario, posso prendere i semi di chia?</p> Rispondi Dott.ssa Azzurra De Luca 6 Dicembre 2019 at 10:15 <p> Cara Giuseppa, non sono a conoscenza di controindicazioni per l’assunzione di semi di chia in caso di terapia ormonale, ma per maggiore sicurezza, le consiglio di parlarne con il suo medico.<br/> Un caro saluto</p> Rispondi ALEX 8 Settembre 2019 at 11:05 <p> Salve, posso consumare i semi di chia anche se ho il colon irritabile?</p> Rispondi Dott.ssa Azzurra De Luca 7 Ottobre 2019 at 16:25 <p> Salve Alex, i semi di chia offrono dei notevoli benefici all’intestino, per cui sono consigliati anche nei casi in cui si soffra di intestino irritabile, stia comunque attento a non esagerare e a non superare i circa 10 g al giorno.<br/> Saluti.</p> Rispondi Paolo 26 Maggio 2018 at 10:00 <p> Buongiorno,<br/> mi hanno parlato dei benefici di questi semi.<br/> Ho una domanda. Ho avuto un infarto due anni fa e prendo già: &#8220;cardioaspirina&#8221;, &#8220;crestor 20 mg&#8221; per il colesterolo e &#8220;Irbesartan e idroclorotiazide&#8221; per la pressione alta.<br/> Ne ho parlato con il mio medico, ma si fida poco dei rimedi naturali e mi ha consigliato di procedere con la medicine.<br/> Posso prendere ugualmente i semi di Chia o ci sono degli effetti collaterali per i farmaci che sto assumendo ?</p> Rispondi Alessandra Esposito 25 Giugno 2018 at 11:58 <p> Buongiorno Paolo, il consumo di semi di chia non causa effetti collaterali dovuti ai farmaci che assume, ma sono d&#8217;accordo col suo medico di base, non sono da intendersi come sostituti dei farmaci ma dei validi alleati nel favorire la riduzione della colesterolemia e dell&#8217;ipertensione.<br/> Dott.ssa Alessandra Esposito</p> Rispondi Enrico 23 Maggio 2018 at 19:51 <p> Salve, i semi di chia e semi in generale contengono purine?</p> Rispondi Caterina Perfetto 30 Giugno 2018 at 11:45 <p> Salve Enrico, i semi in generale sono molto poveri di purine, di cui sono ricchi, invece, soprattutto alimenti di origine animale, tra i quali spiccano alici, sardine, sgombri, cozze, fegato, selvaggina, estratti di carne.<br/> Dott.ssa Caterina Perfetto</p> Rispondi Margherita 20 Febbraio 2018 at 09:47 <p> Vorrei sapere se consumando i semi di chia regolarmente si può fare a meno di assumere il magnesio!<br/> E se si con che dosi..<br/> Grazie</p> Rispondi Stefania Cocolo 12 Marzo 2018 at 16:06 <p> Salve Margherita, questo dipende molto dal motivo per cui lei assume il Magnesio. Nel caso in cui fosse carente di questo minerale, a mio parere l’assunzione di semi di chia non sarebbe sufficiente. Il consumo di questi semi dovrebbe essere associato alle sue proprietà: cioè, principalmente al contenuto di fibre che migliorano il transito intestinale e aumentano il senso di sazietà.<br/> Dott.ssa Stefania Cocolo</p> Rispondi Margherita 20 Febbraio 2018 at 09:44 <p> Scusatemi! Volevo chiedere se consumando regolarmente i semi di chia si può fare almeno di assumere magnesio!<br/> Con quali dosi bisogna consumare i semi in tal caso?<br/> Grazie e buona giornata<br/> Margherita</p> Rispondi Nadi@ 6 Febbraio 2018 at 08:45 <p> Mi chiedevo, i semi di chia è il caso di frantumarli prima di mangiarli? Il corpo riesce a tirar fuori le sostanze nutritive dal seme integro?</p> Rispondi Barbara Ziparo 19 Febbraio 2018 at 11:29 <p> Salve Nadia, la sua affermazione è corretta. Essendo molto piccoli, si rischia di non riuscire a frantumare bene con la masticazione i semi di chia. Per questo motivo, sarebbe opportuno frantumarli prima di consumarli, magari con un mortaio, per beneficiare e assimilare tutti i nutrienti contenuti nei semi di chia.<br/> Dott.ssa Barbara Ziparo</p> Rispondi elisa 26 Gennaio 2018 at 20:40 <p> i bambini possono mangiare semi di chia?</p> Rispondi Alessandra Esposito 10 Marzo 2018 at 21:34 <p> Buonasera Elisa, certamente! L’integrazione dei semi di chia nell’alimentazione dei più piccoli non presenta effetti negativi ma al contrario è un’ottima strategia per aumentare l’assunzione di tutta una serie di elementi tra cui fibre, grassi buoni e calcio.<br/> Cordialmente, Dott.ssa Alessandra Esposito</p> Rispondi Stefania 11 Gennaio 2018 at 11:49 <p> Buongiorno. Io i semi di chia li ho macinati in polvere e li metto direttamente nella pietanza. Può andare bene lo stesso senza ammollo? Mi e’ piu comodo.</p> Rispondi Alessandra Esposito 9 Febbraio 2018 at 12:12 <p> Assolutamente si Stefania, la rottura del seme (come anche l’ammollo in un liquido) facilita l’assorbimento dei micronutrienti a livello intestinale.<br/> Dott.ssa Alessandra Esposito – Biologa Nutrizionista</p> Rispondi maria 27 Dicembre 2017 at 17:22 <p> Sono operata di tumore al seno prendo ascripitin un antitumorale, posso mangiare semi di chia?</p> Rispondi Stefania Cocolo 2 Gennaio 2018 at 17:44 <p> Buongiorno Maria,<br/> non esistono che io sappia al momento controindicazioni nel consumo di semi di chia in caso di patologie tumorali. D’altra parte i semi di chia sono ricchi di acidi grassi polinsaturi e molecole antiossidanti che migliorano la nostra salute.<br/> Dott.ssa Stefania Cocolo</p> Rispondi nicola 25 Ottobre 2017 at 11:10 <p> Buongiorno, vorrei un&#8217;informazione sul consumo dei semi di chia. Io sono circa due anni che ogni mattina consumo 10 grammi di semi di chia al giorno, a volte in 120 ml d&#8217;acqua, a volte in 120 ml di succo d&#8217;ananas. In entrambi i casi arricchisco il tutto con una spremuta di limone. La domanda che voglio porvi è la seguente: cambia qualcosa in termini di bontà o di efficacia se preparo il tutto la sera precedente? Mi spiego meglio: il trascorrere di tutte queste ore prima dell&#8217;assunzione altera la qualità o le proprietà del preparato?</p> Rispondi Azzurra De Luca 30 Ottobre 2017 at 18:14 <p> Salve Nicola, può benissimo preparare i semi di chia la sera prima, il mio consiglio è però quello di conservare la bevanda in frigorifero durante la notte e di spremere il limone fresco appena prima di assumerla, in modo da preservarne al massimo i nutrienti. Saluti.<br/> Dott.ssa Azzurra De Luca</p> Rispondi Giusy 7 Ottobre 2017 at 14:50 <p> Buongiorno, volevo delle informazioni riguardo il batterio helicobacter pylori. Ho appena scoperto di essere colpita, sono entrata in crisi in quanto non so più come alimentarmi. Da un po &#8216;di tempo faccio consumo di semi di chia, di lino ed altri. Come mi devo regolare? Grazie tante</p> Rispondi Caterina Perfetto 7 Dicembre 2017 at 18:22 <p> Buongiorno a lei Giusy, in presenza di Helicobacter pylori può integrare la sua alimentazione con semi di lino, di sesamo, di zucca, di girasole, poiché fonti di Zinco, un minerale che stimola la produzione di mucina, una glicoproteina vischiosa capace di formare una sorta di velo protettivo della mucosa gastrica, impedendone l’ulteriore danneggiamento.<br/> Dott.ssa Caterina Perfetto</p> Rispondi Maria corsini 27 Settembre 2017 at 13:37 <p> Buongiorno, vorrei sapere se i semi di chia li posso utilizzare anche se assumo antiaggreganti. Grazie</p> Rispondi Azzurra De Luca 29 Settembre 2017 at 13:31 <p> Cara Maria, i semi di chia contengono acidi grassi omega 3, ed in particolare acido alfa-linolenico, un acido grasso prezioso per la nostra salute, ma che ha, fra le altre, ha anche proprietà antitrombotiche ed antiaggreganti, per cui se lei assume già dei farmaci antiaggreganti, i semi di chia potrebbero interferire con l’azione degli stessi. Le consiglio pertanto di rivolgersi al suo medico prima di intraprendere un uso regolare di questi semi. Saluti.<br/> Dott.ssa Azzurra De Luca</p> Rispondi Chiara 23 Settembre 2017 at 14:30 <p> Per sfruttarne i benefici, i semi di chia vanno masticati? È così per i semi di lino ad esempio, molti simili alla chia. Spesso uniti ai pasti si ingoiano senza masticarli.</p> Rispondi Caterina Perfetto 29 Settembre 2017 at 13:22 <p> Gentile Chiara, in realtà il modo migliore per sfruttare tutti i benefici dei semi di chia è di lasciarli in ammollo in poca acqua per circa mezz’ora, senza scolarli completamente, ma consumando anche il gel che naturalmente viene rilasciato dai semi, essendo essi mucillaginosi.<br/> Dott.ssa Caterina Perfetto</p> Rispondi nicola 25 Ottobre 2017 at 11:12 <p> Ma infatti non bisogni scolarli, l&#8217;effetto nutritivo dei semi di chia è costituito proprio dal gel che rilascia</p> Rispondi Chiara 23 Settembre 2017 at 14:27 <p> È una buona idea fare germogliare i semi di chia in modo da mangiarne i germogli?</p> Rispondi Caterina Perfetto 29 Settembre 2017 at 13:21 <p> Buongiorno Chiara, certamente: i germogli dei semi di chia hanno un buon sapore, leggermente pungente ma fresco, e possono essere aggiunti a varie pietanze come verdure o insalate. Naturalmente, mantengono tutte le numerose virtù e le proprietà nutrizionali.<br/> Dott.ssa Caterina Perfetto</p> Rispondi Irena 13 Settembre 2017 at 12:17 <p> Salve dott. Posso usare i semi di chia durante l&#8217;allattamento?</p> Rispondi Barbara Ziparo 19 Settembre 2017 at 13:24 <p> Gentile Irena, i semi di chia sono stati definiti come non tossici dalla Food and Drug Administration. Tuttavia, non ci sono studi sulla sicurezza degli stessi in gravidanza e allattamento. È quindi consigliabile chiedere al proprio nutrizionista se possibile integrarli in piccole quantità, adeguandoli al tipo di alimentazione seguita.<br/> Dott. ssa Barbara Ziparo</p> Rispondi Roberta 7 Agosto 2017 at 09:03 <p> É possibile usare i semi chia se si hanno diverticoli ? Grazie</p> Rispondi Barbara Ziparo 19 Settembre 2017 at 13:22 <p> Gentile Roberta, come tutti i semi anche i semi di chia possono dare luogo a infiammazione in caso di malattia diverticolare perché possono incastrarsi tra i diverticoli. In caso si soffra di questa patologia, è necessario adottare un’alimentazione equilibrata senza eccessi ed evitando alimenti fritti e speziati, bevande alcoliche e alimenti raffinati.<br/> Dott.ssa Barbara Ziparo</p> Rispondi Enza 8 Luglio 2017 at 23:45 <p> Buonasera assumo EUTIROX 100 al mattino, posso consumare semi di chia? grazie.</p> Rispondi Azzurra De Luca 29 Settembre 2017 at 13:32 <p> Cara Enza, i semi di chia, avendo proprietà antinfiammatorie sono consigliati in caso di condizioni come l’ipotiroidismo, ma dal momento che non conosco le ragioni per cui lei assume Eutirox e non conosco la sua storia clinica, non sono in grado di rispondere alla sua domanda. In ogni caso, quando si assumono dei farmaci, è sempre buona norma rivolgersi al proprio medico prima di intraprendere un uso regolare di particolari alimenti. Un caro saluto.<br/> Dott.ssa Azzurra De Luca</p> Rispondi Menaka 30 Maggio 2017 at 12:13 <p> Io li prendo la mattina . Un cucchiaino con un bicchiere di Aqua. adesso piu di 2 mese. io acorto la mi mestruazione adesso molto meno (perdit molto poco). questo e normale?</p> Rispondi Mariagrazia 22 Maggio 2017 at 00:12 <p> prendo lo zanipril per la pressione e la cardioaspirina posso usare i semi di chia?</p> Rispondi Azzurra De Luca 29 Settembre 2017 at 13:34 <p> Gentile Mariagrazia, i semi di chia sono in grado di ridurre la pressione arteriosa, ma dal momento che lei assume già dei farmaci contro l’ipertensione, un uso regolare e continuativo di questi semi potrebbe interferire con l’azione dei farmaci, ad esempio potenziandola. Per questa ragione le consiglio di rivolgersi al suo medico, che la potrà sicuramente aiutare. Saluti.<br/> Dott.ssa Azzurra De Luca</p> Rispondi sabrina 20 Aprile 2017 at 20:20 <p> Scusate dopo aver assunto Tranex , posso prendere i semi di chia? Grazie</p> Rispondi Barbara Ziparo 3 Maggio 2017 at 13:32 <p> Salve Sabrina, il Tranex è un farmaco ad azione antiemorragica. Gli omega 3 contenuti nei semi di chia potrebbero contribuire a fluidificare il sangue, pertanto, potrebbero influire sull’attività del farmaco. Le consiglio di sentire il parere del suo medico di fiducia prima di consumare con regolarità questi semi.<br/> Dott.ssa Barbara Ziparo</p> Rispondi leon 9 Aprile 2017 at 00:41 <p> può portare beneficio alla prostata,ingrossata ed ai reni.grazie</p> Rispondi Barbara Ziparo 3 Maggio 2017 at 13:18 <p> Salve Leon, grazie per gli interessanti quesiti. Come ha potuto leggere dall’articolo, i semi di chia sono ricchi degli acidi grassi omega 3 che hanno numerose proprietà benefiche. Tra questi possiamo annoverare anche benefici alla prostata. In particolare, l’effetto antinfiammatorio degli omega 3 è utile in caso di prostatite e ipertrofia prostatica. Inoltre, è stato evidenziato come gli omega 3 siano capaci di prevenire l’insorgenza del tumore alla prostata. Quanto ai reni, non vi sono studi rilevanti per quanto riguarda probabili effetti benefici su di essi. Anzi, in caso si calcoli renali è sempre meglio chiedere consiglio al medico di fiducia in quanto i semi di chia sono ricchi di calcio. Saluti.<br/> Dott.ssa Barbara Ziparo</p> Rispondi soardi cristina 29 Marzo 2017 at 13:22 <p> Vorrei un &#8216;informazione: io per l&#8217;ipertensione prendo VALSARTAN e IDROCLOROTIAZIDE 160mg/12,5, perciò come posso regolarmi con i semi di chia? Grazie.</p> Rispondi Barbara Ziparo 26 Maggio 2017 at 12:22 <p> Salve Cristina, è preferibile consultare il proprio medico di fiducia per chiedergli di eventuali interazioni tra l’assunzione dei semi di chia e i farmaci da Lei assunti in quanto conosce la sua storia clinica e sicuramente saprà consigliarla al meglio.<br/> Dott.ssa Barbara Ziparo</p> Rispondi Marco 23 Gennaio 2017 at 11:56 <p> Ma essendo ricchi di sodio, siamo sicuri che abbassino la pressione?</p> Rispondi Alessandra Esposito 29 Maggio 2017 at 11:13 <p> Buongiorno Marco, i semi di chia forniscono sodio come tutti gli alimenti, ma il quantitativo non è elevato ma molto ridotto. Una porzione di semi di chia apporta 1,6 mg di sodio che corrispondono a 4 mg di sale. Tenendo conto che la quantità massimale di sale che dovremmo consumare al giorno è pari a 5 g (1 cucchiaino), 1 porzione di semi di chia apporta lo 0,08% di questa quantità.<br/> Dott.ssa Alessandra Esposito</p> Rispondi antonella 16 Gennaio 2017 at 14:16 <p> salve avrei alcune domande:<br/> i semi di chia come semplice integratore vanno ridotti in polvere come i semi di lino ? o meglio consumarli interi? o precedentemente in ammollo?<br/> se sostituisco le capsule di aminoacidi( che normalmente assumo in capsule acquistate in una farmacia specializzata e di fiducia) con la chia, può essere una alternativa? ( mangio di tutto poco ma spesso , ma poca carne e pesce e zero uova perche pur essendo magra e sportiva produco colesterolo endogeno che però con alcuni accorgimenti ho abbassato quasi ai livelli normali. quindi la chia andrebbe bene anche per lo sport che pratico 1 ora al giorno cosa ne pensa? nuoce ai reni? se assumo carne o pesce in quel giorno dimezzo la dose?<br/> la chia è alternativa anche ai semi di lino o abbinabile?<br/> cordiali saluti</p> <p> cordiali saluti</p> Rispondi Alessandra Esposito 6 Febbraio 2017 at 15:39 <p> Buongiorno Antonella, nonostante i semi chia abbiamo un buon apporto proteico (circa il 16%) non sono però paragonabili all&#8217;apporto proteico della carne oppure degli integratori di amminoacidi. Se volesse integrare le proteine può farlo con le proteine in polvere del siero di latte (whey) che vanno sciolte in acqua. Ogni integrazione, le ricordo però, va opportunamente valutata con un professionista del settore.<br/> Può sostituire i semi di lino con i semi di chia oppure con i semi di canapa, entrambi hanno un ottimo profilo lipidico e sono ricchi di Omega-3 che aiutano a ridurre i trigliceridi e il colesterolo. Attenzione però che assumere pochissimo colesterolo alimentare porterà il suo organismo a produrre più colesterolo endogeno come compensazione!<br/> Dott.ssa Alessandra Esposito</p> Rispondi Comasia 3 Dicembre 2016 at 18:08 <p> Io li prendo la mattina . Un cucchiaino con un bicchiere di Aqua va bene grazie</p> Rispondi Carla 2 Dicembre 2016 at 20:09 <p> Gentile dott.ssa le chiedo se i semi di chia contengono glutine<br/> Grazie</p> Rispondi Viversano.net 2 Dicembre 2016 at 21:06 <p> Ciao Carla,<br/> i semi di chia non contengono glutine, pertanto sono adatti anche a chi ne è intollerante.<br/> Un caro saluto 🙂</p> Rispondi Carla 2 Dicembre 2016 at 20:05 <p> I semi di chia contengono glutine?<br/> Grazie</p> Rispondi Dina 2 Novembre 2016 at 16:05 <p> Ciao ho avuto un tumore al seno positivo agli ormoni x cui non posso assumere cibi che li stimolano. Per quello che ho letto i semi di chia non li stimolano ma vorrei comunque la vostra conferma. Grazie</p> Rispondi Alessandra Esposito 29 Novembre 2016 at 18:17 <p> Buongiorno Dina, le confermo che i semi di chia possono essere assunti tranquillamente in caso di tumore al seno di tipo ormonale. Inoltre diversi studi hanno verificato l&#8217;efficacia dei semi oleosi, in particolare dei semi di lino nella prevenzione di queste patologie dimostrando che i lignani di cui sono ricchi sarebbero in grado di proteggere contro il cancro bloccando gli enzimi coinvolti nel metabolismo ormonale e interferendo con la crescita e la diffusione delle cellule tumorali, promuovendone l&#8217;apoptosi (suicidio).<br/> Dott.ssa Alessandra Esposito</p> Rispondi vara francesco 20 Settembre 2016 at 11:57 <p> Per quanto tempo si possono mangiare i semi di chia? C’è un limite se non si superano i 15g giornalieri? Grazie.</p> Rispondi Caterina Perfetto 1 Dicembre 2016 at 12:26 <p> Salve Francesco, non sono riportati limiti temporali sul consumo dei semi di chia. Cerchi di non assumerne più di uno o due cucchiai al giorno per evitare eventuali effetti lassativi.<br/> Dott.ssa Caterina Perfetto</p> Rispondi Patrizia Turco 8 Giugno 2018 at 15:56 <p> I semi di chia aiutano a stimolare la tiroide laddove l&#8217;organismo si è bloccato?<br/> Grazie</p> Rispondi Caterina Perfetto 30 Giugno 2018 at 11:54 <p> Gentile Paola, non trovo studi scientifici che correlino i semi di chia direttamente alla tiroide. Consideri, però, che questi piccoli semini apportano numerosi benefici all’organismo e, se inseriti in uno stile di vita adeguato ed equilibrato, aiutano anche a dimagrire.<br/> Dott.ssa Caterina Perfetto</p> Rispondi Alessandra Esposito 26 Dicembre 2016 at 11:59 <p> Buongiorno Francesco, in soggetti sani il consumo di semi di chia può essere quotidiano e prolungato nel tempo, in quanto l’EFSA (Autorità europea per la sicurezza alimentare) ha pubblicato un testo dove dichiara che il consumo di semi di chia non è correlato con effetti avversi<br/> Dott.ssa Alessandra Esposito</p> Rispondi Circe 12 Settembre 2016 at 15:18 <p> Buongiorno, vorrei usare i semi di Chia nella mia dieta quotidiana.<br/> Faccio fitness 3/4 volte a settimana ed ho una alimentazione mediterranea piuttosto varia.<br/> Attualmente devo tenere sotto controllo i livelli di colesterolo ( ereditario ) e perdete un po di peso ( ho fatto una dieta ma sono in una fase di stallo), come posso usare questi semi?<br/> Servono anche per la fame nervosa?<br/> Grazie</p> Rispondi Caterina Perfetto 1 Dicembre 2016 at 12:35 <p> Buongiorno Circe, i semi di chia possono essere integrati nella sua alimentazione abituale per ridurre i fenomeni di stitichezza, per limitare l’assorbimento di glucosio e di colesterolo, grazie al contenuto di fibre, per facilitare il dimagrimento e per donare un maggior senso di sazietà. Li lasci in ammollo circa 10 minuti prima di consumarli, aggiungendoli crudi a zuppe, insalate, macedonie, allo yogurt al mattino o cuocendoli nel latte per alcuni minuti. Ne assuma uno massimo due cucchiai al dì.<br/> Dott.ssa Caterina Perfetto</p> Rispondi Alessandra Esposito 26 Dicembre 2016 at 11:54 <p> Buongiorno Circe, può utilizzare i semi di chia in molteplici ricette: può aggiungerli a yogurt, frullati e porridge, alle sue insalate oppure a prodotti da forno di diverso genere. Come rimedio contro la fame nervosa può mescolare 2 cucchiai di semi di Chia in un bicchiere d’acqua, attendere qualche minuto, ma non troppi, altrimenti assorbiranno troppi liquidi e bere il tutto. Li provi dopo la prima colazione e dopo pranzo in modo da frenare le voglie di metà giornata.<br/> Dott.ssa Alessandra Esposito</p> Rispondi mercurio consiglia 26 Agosto 2016 at 08:55 <p> ciao vorrei sapere come posso consumare i semi di chia? e se posso metterli nel succo di frutta confezionato la sera prima e berlo la mattina a digiuno?.grazie</p> Rispondi Viversano.net 26 Agosto 2016 at 11:28 <p> Ciao,<br/> i semi di chia sono molto versatili in cucina. Puoi aggiungerli anche alle tue bevande (ti consigliamo di scegliere succhi bio e 100% frutta, oppure farli in casa 😉 ).<br/> Una cosa da sapere è che i semi di chia in ammollo tendono a creare un gel, quindi il tuo succo il mattino successivo, sarà più denso. Se vuoi approfondire sugli utilizzi dei semi di chia puoi leggere il nostro articolo dedicato all&#8217; uso dei semi di chia in cucina .<br/> Un caro saluto e a presto 🙂</p> Rispondi christian 23 Agosto 2016 at 12:49 <p> contengono anche arginina?</p> Rispondi Viversano.net 23 Agosto 2016 at 13:52 <p> Ciao Christian,<br/> si, i semi di chia contengono anche una parte di arginina.<br/> Un caro saluto e a presto 🙂</p> Rispondi Mahee Ferlini 4 Gennaio 2016 at 19:56 <p> Attenzione pero&#8217;, perche&#8217; abbassano la pressione arteriosa!</p> Rispondi <h3> LASCIA UN COMMENTO Cancella la risposta </h3> <h3> Social network</h3> <span> <i> </i> </span> <span> <i> </i> </span> <span> <i> </i> </span> <span> <i> </i> </span> <span> <i> </i> </span> <h3> Newsletter</h3> <h3> Iscriviti alla Newsletter e scarichi gratis il <strong> Calendario 2021</strong> </h3> Iscriviti <h3> Ascolta il podcast</h3> <br/> <h4> <span> I più visti</span> </h4> <span> Proprietà degli alimenti</span> <h3> Bere acqua calda e limone al mattino: perché fa bene? ... </h3> <span> Proprietà degli alimenti</span> <h3> Gli innumerevoli benefici di miele e cannella </h3> <span> Proprietà degli alimenti</span> <h3> Proprietà e benefici del cioccolato fondente </h3> <span> Proprietà degli alimenti</span> <h3> Lupini: antichi legumi dalle eccellenti proprietà </h3> <span> Proprietà degli alimenti</span> <h3> Farro: antico cereale ricco di proprietà </h3> <h3> Speciali</h3> <span> Consigli per dimagrire</span> <span> Curiosità sul cibo e la dieta</span> <span> Chi siamo </span> <span> Contatti </span> <span> Scarica gratis </span> <span> Newsletter </span> <span> Podcast </span> <p> Le informazioni e consigli su rimedi naturali (prevalentemente per il benessere, la salute, la bellezza e l’alimentazione) contenuti in questo sito sono presentati al solo scopo informativo, non sostituiscono in nessun caso il parere del medico curante o del professionista della salute che ha in cura il lettore.</p> <span> <i> </i> <span> Facebook</span> </span> <span> <i> </i> <span> Instagram</span> </span> <span> <i> </i> <span> Pinterest</span> </span> <span> <i> </i> <span> Twitter</span> </span> <span> <i> </i> <span> Youtube</span> </span> Privacy policy Avvertenze Cookie Policy Sitemap © 2021 VIVERSANO.net | Riproduzione riservata | PIva IT03669111209<br>
+						
+<iframe width="615 height="315" src="https://www.youtube.com/embed/pVmRNBzkup8" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe><br>	
+</p>
 
-            if (onreadystatechange) {
-              return onreadystatechange.apply(this, arguments);
-            }
-          };
+<div class="float-left">
+<ul>
+<li><a href="index.html">Semi di chia: benefici e controindicazioni - Benessere 360</a></li>
+<li><a href="1.html">11 benefici dei semi di Chia per la salute</a><br></li>
+<li><a href="2.html">Semi di chia | bulk™</a><br></li>
+<li><a href="3.html">Semi di chia - Proprietà e benefici - Albanesi.it</a><br></li>
+<li><a href="4.html">80+ idee su Semi di chia | chia, semi di chia, ricette</a><br></li>
+<li><a href="5.html">Semi di chia - Cure-Naturali.it</a><br></li>
+<li><a href="6.html">Semi di chia: 10 idee per integrarli nella vostra ...</a><br></li>
+<li><a href="7.html">Compra Online Semi di Chia Bio - Ricchi di proteine e per ...</a><br></li>
+<li><a href="8.html">Semi di chia: proprietà e benefici per sangue e intestino ...</a><br></li>
+<li><a href="9.html">Semi di Chia: proprietà, uso, controindicazioni e dove ...</a><br></li>
+</ul>
+</div>
 
-          return send.apply(this, arguments);
-        };
-      })();</script>
-    <style type="text/css">.fancybox-margin{margin-right:0px;}</style><style type="text/css">.fb_hidden{position:absolute;top:-10000px;z-index:10001}.fb_reposition{overflow:hidden;position:relative}.fb_invisible{display:none}.fb_reset{background:none;border:0;border-spacing:0;color:#000;cursor:auto;direction:ltr;font-family:"lucida grande", tahoma, verdana, arial, sans-serif;font-size:11px;font-style:normal;font-variant:normal;font-weight:normal;letter-spacing:normal;line-height:1;margin:0;overflow:visible;padding:0;text-align:left;text-decoration:none;text-indent:0;text-shadow:none;text-transform:none;visibility:visible;white-space:normal;word-spacing:normal}.fb_reset>div{overflow:hidden}@keyframes fb_transform{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}.fb_animate{animation:fb_transform .3s forwards}
-.fb_dialog{background:rgba(82, 82, 82, .7);position:absolute;top:-10000px;z-index:10001}.fb_dialog_advanced{border-radius:8px;padding:10px}.fb_dialog_content{background:#fff;color:#373737}.fb_dialog_close_icon{background:url("/rsrc.php/v3/yq/r/IE9JII6Z1Ys.png") no-repeat scroll 0 0 transparent;cursor:pointer;display:block;height:15px;position:absolute;right:18px;top:17px;width:15px}.fb_dialog_mobile .fb_dialog_close_icon{left:5px;right:auto;top:5px}.fb_dialog_padding{background-color:transparent;position:absolute;width:1px;z-index:-1}.fb_dialog_close_icon:hover{background:url("/rsrc.php/v3/yq/r/IE9JII6Z1Ys.png") no-repeat scroll 0 -15px transparent}.fb_dialog_close_icon:active{background:url("/rsrc.php/v3/yq/r/IE9JII6Z1Ys.png") no-repeat scroll 0 -30px transparent}.fb_dialog_iframe{line-height:0}.fb_dialog_content .dialog_title{background:#6d84b4;border:1px solid #365899;color:#fff;font-size:14px;font-weight:bold;margin:0}.fb_dialog_content .dialog_title>span{background:url("/rsrc.php/v3/yd/r/Cou7n-nqK52.gif") no-repeat 5px 50%;float:left;padding:5px 0 7px 26px}body.fb_hidden{height:100%;left:0;margin:0;overflow:visible;position:absolute;top:-10000px;transform:none;width:100%}.fb_dialog.fb_dialog_mobile.loading{background:url("/rsrc.php/v3/ya/r/3rhSv5V8j3o.gif") white no-repeat 50% 50%;min-height:100%;min-width:100%;overflow:hidden;position:absolute;top:0;z-index:10001}.fb_dialog.fb_dialog_mobile.loading.centered{background:none;height:auto;min-height:initial;min-width:initial;width:auto}.fb_dialog.fb_dialog_mobile.loading.centered #fb_dialog_loader_spinner{width:100%}.fb_dialog.fb_dialog_mobile.loading.centered .fb_dialog_content{background:none}.loading.centered #fb_dialog_loader_close{clear:both;color:#fff;display:block;font-size:18px;padding-top:20px}#fb-root #fb_dialog_ipad_overlay{background:rgba(0, 0, 0, .4);bottom:0;left:0;min-height:100%;position:absolute;right:0;top:0;width:100%;z-index:10000}#fb-root #fb_dialog_ipad_overlay.hidden{display:none}.fb_dialog.fb_dialog_mobile.loading iframe{visibility:hidden}.fb_dialog_mobile .fb_dialog_iframe{position:sticky;top:0}.fb_dialog_content .dialog_header{background:linear-gradient(from(#738aba), to(#2c4987));border-bottom:1px solid;border-color:#043b87;box-shadow:white 0 1px 1px -1px inset;color:#fff;font:bold 14px Helvetica, sans-serif;text-overflow:ellipsis;text-shadow:rgba(0, 30, 84, .296875) 0 -1px 0;vertical-align:middle;white-space:nowrap}.fb_dialog_content .dialog_header table{height:43px;width:100%}.fb_dialog_content .dialog_header td.header_left{font-size:12px;padding-left:5px;vertical-align:middle;width:60px}.fb_dialog_content .dialog_header td.header_right{font-size:12px;padding-right:5px;vertical-align:middle;width:60px}.fb_dialog_content .touchable_button{background:linear-gradient(from(#4267B2), to(#2a4887));background-clip:padding-box;border:1px solid #29487d;border-radius:3px;display:inline-block;line-height:18px;margin-top:3px;max-width:85px;padding:4px 12px;position:relative}.fb_dialog_content .dialog_header .touchable_button input{background:none;border:none;color:#fff;font:bold 12px Helvetica, sans-serif;margin:2px -12px;padding:2px 6px 3px 6px;text-shadow:rgba(0, 30, 84, .296875) 0 -1px 0}.fb_dialog_content .dialog_header .header_center{color:#fff;font-size:16px;font-weight:bold;line-height:18px;text-align:center;vertical-align:middle}.fb_dialog_content .dialog_content{background:url("/rsrc.php/v3/y9/r/jKEcVPZFk-2.gif") no-repeat 50% 50%;border:1px solid #4a4a4a;border-bottom:0;border-top:0;height:150px}.fb_dialog_content .dialog_footer{background:#f5f6f7;border:1px solid #4a4a4a;border-top-color:#ccc;height:40px}#fb_dialog_loader_close{float:left}.fb_dialog.fb_dialog_mobile .fb_dialog_close_button{text-shadow:rgba(0, 30, 84, .296875) 0 -1px 0}.fb_dialog.fb_dialog_mobile .fb_dialog_close_icon{visibility:hidden}#fb_dialog_loader_spinner{animation:rotateSpinner 1.2s linear infinite;background-color:transparent;background-image:url("/rsrc.php/v3/yD/r/t-wz8gw1xG1.png");background-position:50% 50%;background-repeat:no-repeat;height:24px;width:24px}@keyframes rotateSpinner{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
-.fb_iframe_widget{display:inline-block;position:relative}.fb_iframe_widget span{display:inline-block;position:relative;text-align:justify}.fb_iframe_widget iframe{position:absolute}.fb_iframe_widget_fluid_desktop,.fb_iframe_widget_fluid_desktop span,.fb_iframe_widget_fluid_desktop iframe{max-width:100%}.fb_iframe_widget_fluid_desktop iframe{min-width:220px;position:relative}.fb_iframe_widget_lift{z-index:1}.fb_iframe_widget_fluid{display:inline}.fb_iframe_widget_fluid span{width:100%}</style></head>
-    <body data-pid="435760966" data-iid="" style="line-height: normal;" class="stefan-asafti">
-        
-        <div class="container-fluid site-wrapper" bis_skin_checked="1">
-            <!-- this is the Sheet -->
-            <div class="container-fluid header-wrapper sub-open" id="header" bis_skin_checked="1"> <!-- this is the Header Wrapper -->
-    <div class="container" bis_skin_checked="1">
-<div class="title-wrapper" bis_skin_checked="1">
-	<div class="title-wrapper-inner" bis_skin_checked="1">
-	    <a class="logo " href="#" bis_skin_checked="1">
-	    </a>
-	    <div class="title " bis_skin_checked="1">
-	        <a class="title  title-link" href="#form" bis_skin_checked="1">
-                Helenčina sbírka receptů
-            </a> 
-	    </div>
-	    <div class="subtitle" bis_skin_checked="1">
-	        Helena Vybíralová
-	    </div>
+<div class="float-left" id="tdZiwzxcws">
+
+</div>
+
+<div class="clear" id="1Fvexo5p"></div>
+
+<hr>
+<h2 id="cn3nbc3I"><ul>
+<li><a href="index.html">Semi di chia: benefici e controindicazioni - Benessere 360</a><br> Semi di chia: alimentazione. Questi semi possono essere consumati crudi, aggiunti a yogurt, zuppe o vellutate, oppure possono essere utilizzati per preparare ricette dolci o ricette salate. Si può realizzare la farina, oppure il gel, che ha un ottimo potere addensante e che può sostituire anche le uova per un’alternativa vegana.</li>
+<li><a href="1.html">11 benefici dei semi di Chia per la salute</a><br> Bevanda energizzante ai semi di chia 07/07/2018. Bevanda energizzante ai semi di chia Questa bevanda energizzante ai semi di chia oltre ad essere buona e rinfrescante, vanta mille proprietà: è detox, energizzante, antiossidante, idratante, favorisce la perdita di peso, riduce l’appetito, migliora la digestione e aumenta le prestazioni dell’allenamento.</li>
+<li><a href="2.html">Semi di chia | bulk™</a><br> Semi di chia in cucina; I semi di chia sono originari del Messico e del Guatemala e rappresentavano un alimento base per gli antichi Aztechi e Maya. Sono ricchi di nutrienti e proprietà. Vediamone alcune! Valori nutrizionali . 100 g di semi di chia contengono. 534 kcal; proteine 18,3 g; grassi 42,1 g; grassi saturi 3,6 g; carboidrati 28,8 g; zuccheri 1,5 g;</li>
+<li><a href="3.html">Semi di chia - Proprietà e benefici - Albanesi.it</a><br> Semi di chia proprietà. Ricchi di numerosi nutrienti: proteine, lipidi, carboidrati, fibre vegetali e antiossidanti naturali, contengono anche acidi grassi essenziali come omega 3 (8 volte la quantità contenuta nel salmone), che consente di abbassare la quantità di colesterolo cattivo nel sangue e aumentare quello buono.. In ogni seme ci sono tutti gli amminoacidi essenziali al buon ...</li>
+<li><a href="4.html">80+ idee su Semi di chia | chia, semi di chia, ricette</a><br> I semi di Chia sono piccoli semi neri provenienti dalla pianta Salvia Hispanica, che appartiene alla stessa famiglia della menta.. Questa pianta è originaria del Sud America. I semi di Chia sono apprezzati soprattutto per la loro capacità di fornire energia.. Infatti “chia” è un’antica parola Maya che significa “forza”. Nonostante la loro storia così antica, solo di recente i ...</li>
+<li><a href="5.html">Semi di chia - Cure-Naturali.it</a><br> Semi di chia. Semi di chia di alta qualità provenienti dal Sudamerica. Ricchi di proteine, pieni di gusto e grande fonte di fibre alimentari. I nostri semi di chia nel formato da 100 g contengono 20 g di proteine e 38 g di fibre alimentari, un'ottima fonte di cibo integrale e di contenuto nutrizionale.</li>
+<li><a href="6.html">Semi di chia: 10 idee per integrarli nella vostra ...</a><br> I semi di chia a crudo macinati con un macina spezie diventano una fantastica farina di chia, con la consistenza di una polvere sottile. Si può aggiungere alla farina abituale a varie ricette, per farne pizze, pane o focacce oppure usare per altre preparazioni, come pastelle, dolci (muffin, crespelle, pancake, biscotti) o creme da addensare.</li>
+<li><a href="7.html">Compra Online Semi di Chia Bio - Ricchi di proteine e per ...</a><br> I semi di chia sono piccoli semi scuri prodotti da una pianta messicana chiamata da Linneo ‘Salvia Hispanica’ e ritenuta erroneamente dal botanico un’erbacea di origine Europea. Già in tempi antichi, questi semi costituivano uno degli elementi base della cucina azteca e maya poiché si pensava che dal loro consumo i guerrieri potessero trarre la forza necessaria per affrontare le battaglie.</li>
+<li><a href="8.html">Semi di chia: proprietà e benefici per sangue e intestino ...</a><br> Sono una fonte di proteine, carboidrati e lipidi, ma anche fibre vegetali, vitamine, sali minerali e antiossidanti. Sono i semi di Chia. La natura anche stavolta ci sorprende con questi piccoli semi idrofili che racchiudono ottime proprietà per la nostra salute, dunque a noi non resta che utilizzarli.</li>
+<li><a href="9.html">Semi di Chia: proprietà, uso, controindicazioni e dove ...</a><br> I semi di chia sono i semi di una pianta, la Salvia hispanica, che appartiene alle Lamiacee, la stessa della menta, della lavanda e della salvia comune. Fanno parte dei superfood, alimenti che hanno un contenuto di sostanze preziose per la salute, come vitamine, sali, enzimi, antiossidanti, fibre ecc..., superiore alla media dei cibi.</li>
+</ul></h2>
+<hr>
+<img src="img/db34c972ab370b0450e2cd24315e7be2.jpg" width="50%" class="thumb_medium" id="TSEiMKioAXa"/>
+<img src="img/847f23788681de78853df70738d7e458.jpg" width="50%" class="thumb_medium" id="1UzvZXb"/>
+<img src="img/5b85f50988ca0510deff742a609db345.jpg" width="50%" class="thumb_medium" id="4FlafnFYNh"/>
+
+</section>
+<aside class="col-right">
+	<div class="box">
+
+		<h2 id="gnM3YNmwSXc">Social</h2>
+		<div class="font-awesome">
+			<a href="#"><i class="fa fa-facebook-square fa-2x" aria-hidden="true"></i></a>
+			<a href="#"><i class="fa fa-twitter-square fa-2x" aria-hidden="true"></i></a>
+			<a href="#"><i class="fa fa-pinterest-square fa-2x" aria-hidden="true"></i></a>
+			<a href="#"><i class="fa fa-google-plus-square fa-2x" aria-hidden="true"></i></a>
+			<a href="#"><i class="fa fa-linkedin-square fa-2x" aria-hidden="true"></i></a>
+			<a href="#"><i class="fa fa-tumblr-square  fa-2x" aria-hidden="true"></i></a>
+		</div>
+		<hr>
+		<div class="font-awesome" id="D2VwGRTt45">
+			<a href="#"><i class="fa fa-cc-mastercard fa-2x" aria-hidden="true"></i></a>
+			<a href="#"><i class="fa fa-cc-visa fa-2x" aria-hidden="true"></i></a>
+			<a href="#"><i class="fa fa-cc-discover fa-2x" aria-hidden="true"></i></a>
+			<a href="#"><i class="fa fa-cc-paypal fa-2x" aria-hidden="true"></i></a>
+		</div>
 	</div>
-</div>  <!-- these are the titles -->
-
-    </div>
-</div>  <!-- this is the Header content -->
-            <div class="container-fluid content-wrapper" id="content" bis_skin_checked="1"> <!-- this is the Content Wrapper -->
-    <div class="container" bis_skin_checked="1">
-        <div class="row-fluid content-inner" bis_skin_checked="1">
-            <div id="left" class="span9" bis_skin_checked="1"> <!-- ADD "span12" if no sidebar, or "span9" with sidebar -->
-                <div class="wrapper " bis_skin_checked="1">
-                    <div class="content" bis_skin_checked="1">
-            <div class="row-fluid layout5-row  margins-topbottom padding-all " bis_skin_checked="1">
-                <div class="sections-wrapper" bis_skin_checked="1">
-                        <div class="span12 " bis_skin_checked="1">
-                                <div class="outer-margin-on first last" bis_skin_checked="1">
-                                    <div class="section article margins-on" bis_skin_checked="1">
-    <style>.wordwrapfix {
-        word-wrap:break-word;
-    }
-</style>
-<div class="heading wordwrapfix" bis_skin_checked="1">
-        <h3>Nepečené cukroví s kakaem</h3>
+</aside>
 </div>
-
-    <div class="content" bis_skin_checked="1">
-<div class="img-simple  " bis_skin_checked="1">
-    <div class="image" bis_skin_checked="1">
-            <a data-ss="imagemodal" data-href="https://i.pinimg.com/564x/38/a1/8f/38a18f2e5ea0db4eee972b1cf7069381.jpg" rel="group" has-arrows="False"><img src="news_files/i285415639406045741._szw1280h1280_.jpg"></a>
-    </div>
-    </div>
-<p style="text-align: left;" align="center">&nbsp;</p> <p style="text-align: left;" align="center"><span style="text-decoration: underline;">37. RUMOVÁ ČOKOLÁDA:</span></p> <p style="text-align: left;">250 g Omega, 200 g moučkového
- cukru, 80 g sušeného mléka, 40 g kakaa, 2 lžíce rumu, 1 vanilkový cukr. Všechny suroviny rozehřejeme ve vodní lázni a plníme do formiček vypláchnutých vodou.</p> <p style="text-align:
- left;" align="center"><span style="text-decoration: underline;">36. OŘECHOVÁ ČOKOLÁDA:</span></p> <p style="text-align: left;">250 g Omega, 250 g moučkového cukru, 100 g kakaa, 40 g mletých ořechů, 5 lžic Solamylu. Ve vodní
- lázni rozpustíme tuk, vmícháme cukr, Solamyl, kakao a mícháme, až se hmota spojí. Odstavíme, vmícháme ořechy a plníme do formiček vypláchnutých vodou.</p> <p style="text-align:
- left;" align="center"><span style="text-decoration: underline;">35. NUGÁT:</span></p> <p style="text-align: left;">250 g moučkového cukru, 250 g Omega, 250 g drcených sušenek, 2 vejce, 50 g kakaa, trocha sekaných ořechů,
- instantní kávy a rumu. Utřeme vejce s cukrem, přidáme kakao, tuk a ostatní suroviny. Dobře promícháme a rozetřeme na plech vyložený pečícím papírem. Jakmile nugát ztuhne, nakrájíme
- na kostky.</p> <p style="text-align: left;" align="center"><span style="text-decoration: underline;">34. DOUTNÍČKY:</span></p> <p style="text-align: left;" align="left">1 balíček kandovaného ovoce, 100 g rozinek, 1 balíček fíků,
- 1 vejce, 125 g Omegy, 150 g moučkového cukru, 50 g kakaa, 200 g mletých piškotů, 1 lžíce džemu, trocha rumu. Kandované ovoce, rozinky, fíky pomeleme a přidáme ostatní suroviny. Z dobře vypracované
- hmoty tvarujeme doutníčky, namáčíme je do čokolády, špičky obalíme ve strouhaném kokosu.</p> <p style="text-align: left;" align="center"><span style="text-decoration: underline;">33. OVESNÉ KAKAOVÉ
- KULIČKY:</span></p> <p style="text-align: left;">150 g ovesných vloček, 100 g moučkového cukru, 50 g másla, 3 lžíce kakaa, 1 vanilkový cukr. Vločky smícháme s ostatními surovinami. Tvarujeme kuličky.
- Můžeme je obalovat ve strouhané čokoládě.</p> <p style="text-align: left;" align="center"><span style="text-decoration: underline;">32. KAKAOVÉ KULIČKY SALKO:</span></p> <p style="text-align: left;">250 g Omegy, 1 Salko, 80 g kakaa, 200
- g moučkového cukru, 8 lžic rumu. Rozpustíme tuk, do vlažného vmícháme Salko, cukr s kakaem, rum a vymícháme dohladka. Necháme ztuhnout v chladničce, tvarujeme kuličky, které obalujeme ve strouhaných
- oříšcích nebo v kokosu.</p> <p style="text-align: left;" align="center"><span style="text-decoration: underline;">31. BONAPARTKY:</span></p> <p style="text-align: left;" align="left">200 g drcených dětských piškotů,
- 100 g mletých ořechů, 100 g moučkového cukru, 100 g másla, 1 bílek, 2 lžíce rumu, 20 g kakaa. Vypracujeme těsto, necháme v chladu ztuhnout. Tvarujeme kuličky, máčíme v čokoládové polevě.
- Vkládáme do papírových košíčků.</p> <p style="text-align: left;" align="center"><span style="text-decoration: underline;">30. ČOKOLÁDKY:</span></p> <p style="text-align: left;" align="left">190 g moučkového
- cukru, 250 g 100% tuku, 65 g kakaa, 125 g sušeného mléka. Nad párou rozpustíme tuk, vmícháme prosetý cukr, mléko, kakao a vymícháme dohladka. Do výlisku z bonboniéry
- nalijeme trochu čokolády (můžeme přidat podrcené oříšky, piškoty) a necháme ztuhnout.</p> <p style="text-align: left;" align="center"><span style="text-decoration: underline;">29. ČOKOLÁDOVÉ PRALINKY:</span></p>
- <p style="text-align: left;">100 g moučkového cukru, 250 g tuku Iva (Omega), 2-3 vejce, 2 lžičky Maizeny, 30 g kakaa, 1 vanilkový cukr, podle chuti rum. Ve vodní lázni vyšleháme vejce s cukrem i vanilkovým,
- Maizenou a kakaem. Odstavíme, vmícháme nakrájený tuk a dobře vyšleháme. Můžeme ochutit rumem. Krém stříkáme cukrářským sáčkem s nástavcem do papírových
- košíčků, do hromádky zapíchneme oloupanou mandli.</p> <p style="text-align: left;" align="center"><span style="text-decoration: underline;">28. VÁNOČNÍ NEPEČENÝ JEŽEK:</span>&nbsp;&nbsp;</p> <p style="text-align:
- left;" align="left">200 g posekaných piškotů, 100 g ml. cukru, 250 g rozpuštěného a vychladlého 100 % tuku Omega, 2 vejce, 40 g kakaa, 100 g nakrájeného kandovaného ovoce, 50 g nasekaných ořechů,
- hrst mletých ořechů, trocha rozinek, 1 dl rumu, 1 vanilkový cukr. Vše smícháme a necháme v chladu ztuhnout. Tvarujeme válečky, obalíme je v kokosu, zabalíme do alobalu a uložíme v chladnu.
- Krájíme dle potřeby asi na 1 cm široké plátky.&nbsp;&nbsp;&nbsp;</p> <p style="text-align: left;" align="center"><span style="text-decoration: underline;">27. NUGÁT:</span></p> <p style="text-align: left;" align="left">Utřeme
- 60 g másla a 160 g ml. cukru, vetřeme 1 vejce, vmícháme 160 g mletých sucharů, 3 lžíce kakaa, 2 lžíce rumu a 2 lžíce vanil.cukru. Z hmoty vyválíme placku, polijeme kakaovou polevou a krájíme
- čtverečky. Lze přidat i rozinky nebo kandované ovoce.</p> <p style="text-align: left;" align="center"><span style="text-decoration: underline;">26. ČOKOLÁDOVÝ SALÁM:</span></p> <p style="text-align: left;" align="left">300 g rozdrobených
- piškotů pokapeme 2 lžícemi rumu. Utřeme 2 vejce s 200 g ml. cukru a přidáme 40 g kakaa. 250 g rozpuštěného, vlahého ztuženého tuku spojíme s utřeným vejcem, přidáme piškoty a vše
- dobře promícháme. Uděláme šišku jako salám, zabalíme do alobalu a dáme do lednice ztuhnout. Pak krájíme kolečka.</p> <p style="text-align: left;" align="center"><span style="text-decoration:
- underline;">25. DOMÁCÍ ČOKOLÁDY TMAVÁ:</span></p> <p style="text-align: left;" align="left">250 g 100% tuku rozpustíme a do horkého vmícháme 250 g ml. cukru, 1 lžíci Solamylu a 100 g kakaa. Směs
- nalijeme do vodou vypláchnutých formiček, necháme ztuhnout a vyklopíme.</p> <p style="text-align: left;" align="center"><span style="text-decoration: underline;">24. DOMÁCÍ ČOKOLÁDOVÁ KOLEKCE:</span></p>
- <p style="text-align: left;" align="left">Ve vodní lázni rozpustíme 250 g Hery nebo jiného tuku, přidáme 250 g ml. cukru, 60 g kakaa a umícháme hladkou hmotu. Nakonec přidáme 3 lžíce Solamylu a
- 90 g ml. ořechů. Hmotu dáme do formiček vypláchnutých studenou vodou, necháme ztuhnout a narovnáme do krabice od bonboniéry nebo kolekce. Jednotlivé kousky můžeme zabalit do celofánu.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">23. KAKAOVÉ ÚLKY:</span></p> <p class="styl9" style="text-align: left;" align="left">150 g moučkového cukru, 50 g másla, 150 g mletých dětských
- piškotů, 2 lžíce kakaa, 1 dl rumu. Vypracované těsto tvarujeme do válečku, který vyválíme v moučkovém cukru. Malé kousky vtlačujeme do formiček úlků vysypaných moučkovým cukrem.
- Vyklepneme a necháme do druhé dne sušit. Plníme vaječným koňakem nebo krémem (máslo, moučkový cukr, žloutek, lžička rumu). Naplněné úlky přiklopíme piškotem.</p> <p style="text-align:
- left;" align="center">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span style="text-decoration: underline;">22. PUNČOVÉ KOULE:</span></p> <p style="text-align: left;" align="left">Ve vodní lázni necháme změknout 50 g čokolády na vaření, přidáme 100 g moučkového cukru, 250 g másla, 2 balíčky drcených piškotů, 100 g mletých ořechů, 2 lžíce
- kakaa, 1 dl rumu, 0,5 dl ovocného sirupu a 1 vanilkový cukr. Z vychladlé hmoty tvarujeme kuličky a obalujeme v kokosu.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">21. DOMÁCÍ
- NUGETA:</span></p> <p class="styl9" style="text-align: left;">200 g másla, 250 g ztuženého 100% tuku, 2 kondenzovaná slazená mléka Salko, 1 balíček kakaa, strouhané ořechy. V nádobě nad parou rozpustíme
- máslo a ztužený tuk, přisypeme kakao, vymícháme. Přilijeme slazené mléko, důkladně promícháme, prohřejeme (nevaříme). Vmícháme mleté ořechy (nemusí být).</p>
- <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">20. ČOKOLÁDA:</span></p> <p class="styl9" style="text-align: left;">1 100% tuk, 1 čokoláda na vaření, 2 čokoládové pudinky,
- 1 celé kakao, 250 g cukru. Ve vodní lázni rozpustíme tuk, přidáme rozlámanou čokoládu a necháme rozpustit. Potom přidáme dohromady smíchané pudinky, kakao, cukr a dobře promícháme.</p>
- <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">19. ČOKOLÁDOVÁ VEJCE SE ZMRZLINOU:</span></p> <p class="styl9" style="text-align: left;">250 g měkkého tvarohu, 1 kelímek zakysané
- smetany, 100 g moučkového cukru, 1/2 balíčku vanilkového cukru. Vše našleháme do hladkého krému. Ve vodní lázni rozpustíme 125 g ztuženého tuku, vmícháme 1 lžíci
- moučkového cukru, 4 lžíce kakaa, 2 lžíce Solamylu (škrobové moučky), 2 lžíce vřelé vody. Vymícháme do lesklé čokoládové hmoty. Čistý plastový obal na vajíčka
- vypláchneme studenou vodou. Do každého otvoru nalijeme čokoládu a doplníme tvarohovým krémem. Necháme ztuhnout v mrazničce.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration:
- underline;">18. PIŠKOTOVÝ DORT:</span></p> <p class="styl9" style="text-align: left;">1 balíček kakaa uvaříme ve 4 dl vody, necháme vychladnout. Ušleháme krém z 250 g másla, 150 g cukru a 4 žloutků.
- Do krému zašleháme uvařené kakao. Smícháme se 2 balíčky piškotů, pokapeme rumem. Dáme do formy a necháme do druhého dne uležet v lednici. Před podáváním zdobíme
- ovocem a šlehačkou.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">17. PLNĚNÉ ŠUHAJDY:</span></p> <p class="styl9" style="text-align: left;">125 g 100% tuku, 100 g čokolády
- na vaření, 2 lžičky kakaa. Tuk a čokoládu rozpustíme ve vodní lázni a přidáme prosáté kakao. Rozpuštěnou hmotu lijeme do hlubších formiček, do středu dáme náplň a opět
- trochu vychladlé čokolády. Pak necháme ztuhnout v mrazáku 1 hodinu a vyklopíme. <span style="text-decoration: underline;">Náplň:</span> Do trochy mléka dáme 200 g moučkového cukru, 125 g 100% tuku,
- mírně zahřejeme až tuk roztaje, přidáme 2 lžičky kakaa, 50 g mletých ořechů, 30 g sekaných rozinek, rum podle chuti.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">16. KULIČKY
- SALKO:</span></p> <p class="styl9" style="text-align: left;">200 g moučkového cukru, 1 slazené kondenzované mléko Salko, 80 g kakaa, 250 g 100% ztuženého tuku, rum. Nad parou necháme rozpustit tuk, vmícháme
- kakao, cukr a pomalu přiléváme slazené mléko. Ochutíme rumem, vymícháme do hladké hmoty a necháme v chladničce ztuhnout. Lžičkou vykrajujeme kousky hmoty a v mletých oříšcích
- (kokosu) je vyválíme do kuliček.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">15. ČOKOLÁDOVÉ KULIČKY:</span></p> <p class="styl9" style="text-align: left;">20 g moučkového
- cukru, 2 žloutky, 60 g tuku, 200 g změklé čokolády na vaření, 20 g kakaa, 2 lžíce rumu. Vše dobře utřeme, vyšleháme a necháme asi 1 hodinu v chladu ztuhnout. Pak tvarujeme kuličky,obalujeme v kokosové
- moučce nebo strouhané čokoládě a vkládáme do papírových košíčků.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">14. NEPEČENÉ ČOKOLÁDOVÉ
- KOŠÍČKY:</span></p> <p class="styl9" style="text-align: left;">300 g moučkového cukru, 250 g 100% ztuženého tuku, 80 g kakaa. V nádobě nad párou rozpustíme tuk, přidáme cukr a kakao. Vymícháme
- do hladka, necháme mírně ochladit. Lžičkou dáváme do papírových košíčků trochu vlažné čokolády, ořechovou náplň (smícháme 150 g moučkového cukru se 150 g mletých
- ořechů, 50 g nakrájených rozinek a 1 dl rumu) a zalijeme čokoládou. Necháme v chladu ztuhnout.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">13. RUMOVÝ SALÁM:</span></p>
- <p class="styl9" style="text-align: left;">200 g sušenek Be-Be, 250 g moučkového cukru, 250 g ztuženého 100% tuku, 50 g kakaa, 10-15 lžic rumu, sekané mandle, ořechy, rozinky, kandované ovoce (podle potřeby). V nádobě
- nad vařící vodou rozpustíme tuk, vmícháme cukr, kakao a vymícháme hladkou hmotu. Odstavíme, přidáme pomleté sušenky, mleté ořechy, mandle, kandované ovoce, rozinky a
- rum. Vypracujeme vláčné těsto, vyválíme do válečku, zabalíme do celofánu a necháme přes noc ztuhnout. Krájíme na kolečka.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">12. NUGÁTOVÝ ZÁVIN:</span></p> <p class="styl9" style="text-align: left;">250 g kávových oválků, 150 g moučkového cukru, 3 lžíce kakaa, 3 lžíce rumu. Oválky
- umeleme, přidáme ostatní suroviny a vypracujeme těsto, které vyválíme na pečicím papíře. Potřeme náplní, srolujeme a dáme ztuhnout do lednice. <span style="text-decoration: underline;">Náplň:
- </span>Utřeme 200 g moučkového cukru, 150 g másla, 1 žloutek.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">11. VIŠNĚ V KAKAOVÉM KRÉMU:</span></p> <p class="styl9" style="text-align: left;">125 g moučkového cukru, 125 g 100% tuku (Lukana), 6 kakaových pudinků, 4 lžíce kakaa, 1 vanilkový cukr, 1 dl mléka, 4 lžíce rumu. Za stálého míchání vaříme
- nad parou všechny suroviny do zhoustnutí. Vychladlé promícháme do hladka a pomocí zdobítka na dorty plníme do poloviny papírových košíčků. Položíme višni, nastříkáme
- krém a nahoru položíme oříšek. Necháme ztuhnout.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">10. KOŇAKOVÉ ŠPIČKY: </span></p> <p class="styl9" style="text-align:
- left;">180 g moučkového cukru, 120 g másla, 200 g dětských piškotů, 2 lžíce kakaa, 4 lžíce rumu. Piškoty rozdrtíme, smícháme s cukrem, máslem, kakaem a rumem. Vypracujeme těsto, kousky
- těsta vtlačujeme do malých likérových štamprliček vysypaných moučkovým cukrem. Prstem vytlačíme důlek, vyklopíme a naplníme krémem (máslo utřené s vaječným koňakem)
- a přilepíme piškot nebo sušenku. Můžeme polít čokoládovou polevou.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">9. VOSÍ HNÍZDA:</span></p> <p class="styl9" style="text-align: left;">180 g moučkového cukru, 80 g másla, 200 g mletých piškotů, 50 g kakaa, 4 lžíce rumu, 2 lžíce vody. Zpracujeme těsto, které necháme 2 dny uležet. Potom plníme formičky
- úlku, do středu dáme náplň a přiklopíme piškot. Namáčíme v čokoládové polevě. <span style="text-decoration: underline;">Náplň:</span> vymícháme do hladka 80 g moučkového
- cukru, 1 syrový žloutek, 1 vařený prolisovaný žloutek, 1 lžíci kondenzovaného mléka, 2 lžíce rumu.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">8. ČOKOLÁDOVÉ
- KULIČKY:</span></p> <p class="styl9" style="text-align: left;">200 g moučkového cukru, 250 g 100% tuku (modrá Lukana, Omega), 2 lžíce Solamylu, 4 lžíce kakaa, 1 lžíce rumu, 1 slazené Salko. Do kastrůlku nastrouháme
- tuk, přidáme ostatní suroviny a ve vodní lázni za stálého míchání vše spojíme do hladké čokoládové hmoty. Necháme v chladu ztuhnout, lžičkou vykrajujeme
- kuličky a obalujeme v mletých oříšcích nebo kokosové moučce. Necháme na tácku vyloženém alobalem ztuhnout.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">7.
- KAKAOVÉ KULIČKY:</span></p> <p class="styl9" style="text-align: left;">100 g moučkového cukru, 200 g ztuženého tuku, 2-3 vejce, 2 lžičky Maizeny, 30 g kakaa, vanilkový cukr. Ve vodní lázni šleháme vejce,
- cukr, vanilkový cukr a Maizenu do hustého krému. Pak přidáme tuk, vyndáme z vodní lázně a mícháme do rozpuštění tuku. Za občasného zamíchání necháme
- vychladit. Tvarujeme kuličky, které obalujeme v mletých oříšcích nebo čokoládovém drobení.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">6. KOŠÍČKY
- S ROZINKAMI:</span></p> <p class="styl9" style="text-align: left;">250 g moučkového cukru, 250 g másla nebo jiného tuku, 3 lžíce Maizeny, 2 lžíce kakaa, 50 g rozinek, 2 dl mléka. Cukr smícháme s mlékem,
- přidáme Maizenu, kakao, vše dobře promícháme a za stálého míchání uvaříme do husta. Pak přidáme tuk a rozinky, vymícháme do hladka a směsí naplníme papírové
- košíčky, které jsme si připravili na tác. V chladničce necháme vychladit.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">5. VIŠNĚ V ČOKOLÁDĚ:</span></p>
- <p class="styl9" style="text-align: left;">120 g tuku (100%), 120 g moučkového cukru, 6 kakaových pudinků, 1 vanilkový cukr, 4 lžíce kakaa, 1 dl mléka, 1 dl rumu. Vše vaříme ve vodní lázni do zhoustnutí.
- Sáčkem na zdobení plníme do papírových košíčků hmotu, višni, hmotu. Zdobíme oříškem.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">4.
- ČOKOLÁDOVÉ KOUSKY:</span></p> <p class="styl9" style="text-align: left;" align="left">250 g moučkového cukru, 250 g ztuženého tuku, 120 g kakaa, 1 lžička vanilkového pudinku. Nad parou rozpustíme tuk, smícháme
- s kakaem a cukrem. Vymícháme do hladka a přidáme vanilkový pudink. Můžeme přidat sekané mandle, ořechy. Plníme formičky vypláchnuté studenou vodou, necháme v chladu ztuhnout a vyklopíme.</p>
- <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">3.&nbsp;</span><span style="text-decoration: underline;">KRÉMOVÉ KOULE: </span></p> <p class="styl9" style="text-align: left;">Uvaříme
- hustý puding ze 1/4 l mléka a 1 van. pudin. prášku. Do vlažného vmícháme 50 g 100% tuku, 250 g másla, 150 g ml. cukru, 2 lžíce kakaa, rum a na kostičky nakrájený piškotový
- plát, který upečeme z&nbsp;5 vajec, 100 g ml. cukru a 150 g polohr. mouky. Promícháme, přidáme okapaný na kousky nakrájený ananas a zahustíme ml.mandlemi. Tvarujeme koule, které obalujeme
- v&nbsp;ml. mandlích.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">2. ČOKOLÁDA STŘÍKANÁ DO KOŠÍČKŮ:</span></p> <p class="styl9" style="text-align: left;" align="left">Ušleháme
- do husta (ručně asi 30 minut) 3 vrchovaté lžíce moučkového cukru, 2 vejce, 1 žloutek, vanilkový cukr. Ve vodní lázni rozpustíme 250 g 100% tuku, 1/2 tabulky čokolády na vaření, 50 g kakaa. Mícháme
- až je hmota lesklá a hladká. Opatrně zašleháme do žloutkového krému a pomocí sáčku s trubičkou stříkáme přímo do papírových košíčků.</p> <p class="styl9" style="text-align: left;" align="center"><span style="text-decoration: underline;">1. KOKOSOVÝ NUGÁT:</span></p> <p class="styl9" style="text-align: left;" align="left">500 g dětských piškotů, 130 g moučkového cukru, 250
- g 100% tuku, 50 g kakaa, 10 lžic rumu. Do rozpuštěného tuku vmícháme cukr, mleté piškoty, kakao a rum. Rozválíme na alobalu a potřeme kokosovým krémem. Utřeme 250 g másla s 250 g
- moučkového cukru, přidáme 250 g kokosové moučky, vanilkový cukr. Polijeme rozpuštěnou čokoládou a necháme v chladu ztuhnout. Krájíme na kostičky.</p>    </div>
+<footer>
+<div class="ftop" id="k5BvRSosg">
+Copyright &copy; 2020 - All rights reserved.
+<br>
+	
+</div></div>
+<div class="fbottom">
 </div>
-
-                                </div>
-                        </div>
-                </div>
-            </div>
-    </div>
-
-                
-                </div>
-            </div>
-            <div id="right" class="span3  " bis_skin_checked="1">
-                <div class="sidebar" bis_skin_checked="1">
-            <div class="wrapper latest-comments" bis_skin_checked="1">
-                <style>.wordwrapfix {
-        word-wrap:break-word;
-    }
-</style>
-
-            </div>
-</div>
-            </div>
-        </div>        
-    </div>
-</div>  <!-- the controller has determined which view to be shown in the content -->
-            <div class="container-fluid footer-wrapper" id="footer" bis_skin_checked="1">
-    <!-- this is the Footer Wrapper -->
-    <div class="container" bis_skin_checked="1">
-        <div class="footer-info" bis_skin_checked="1">
-                    </div>
-        <div id="css_simplesite_com_fallback" class="hide" bis_skin_checked="1"></div>
-    </div>
-</div>
-
-  <!-- this is the Footer content -->
-        </div>
-                        
-        <input type="hidden" id="anti-forgery-token" value="vFZIp11QDd7w1cZjYdzwVVw3rTHgQi1lpMMqomvLq/qGfx85dADIn6rd+jb5+yvdIjnIKNejlFu6vxL7J8Np5d73QnCpw9j80iNY7PPXkg6Gz/95hpiCBRd7itWHBJdFA6NEhqIiPO5N6wuOCoW2g/HglLcr73b8kbMmWwrK1IEyCL+Ni27wNUmoVOGWopEvfoZ44MhC6YGFakfldLdtt/qGVraRzj2C2Qf71gYrgzljkb5LrFsFUkwfgwK80Zj2Q7GBHlIEHnkm7bgK9eMa4mEdisQROuaocN41RStMOuylvv1bQBsrJpnoAtFx3cHyLqy+qVBzlZvelpTDjaMR6yus4mIUqXWSX9cIzSWv4k/Gy29rQLUQji0xeAd1CdbLbqJg6JBeP3RAqk1IPlsomECbHK1HIsaLrnTPV7yW3eX9kIvSf+6KN208xrHS79O7Ca0t3ZxiXX4kRbLD86KyxA==">
-        
-        <script>
-    dataLayer = [{"SiteVer":"US","MainOrUser":"UserPage","PreOrFre":"Premium","Language":"cs","Culture":"cs-CZ","Instrumentation":"ShowPage","Market":"CZ","ExpQS":""}];
-</script>
-        <!-- Remove after blog exp concludes -->
-
-
-                <script type="text/javascript" src="news_files/frontendApp.min.js"></script>
-        <script type="text/javascript">if(typeof window.jQuery=="undefined"){(function(){var a=document.createElement("script");a.type="text/javascript";a.src="/c/js/version3/frontendApp/init/frontendApp.min.js?_v=6018cd3fc25cf97a1ea8aea24a735253";document.getElementsByTagName('head')[0].appendChild(a);})();}</script>
-
-    <script type="text/javascript" src="news_files/api.js"></script>
-
-
-            <script type="text/javascript">
-                var req = { "cmd": "VisitorInfo" };
-                var theApiUrl = '/userPages/pages/handleAsyncCmd.aspx';
-                window.session = {
-                    options: { gapi_location: true },
-                    start: function (session) {
-                        req.sessionData = JSON.stringify(session);
-                        $.ajax({
-                            'url': theApiUrl,
-                            'cache': false,
-                            'type': 'POST',
-                            'contentType': 'application/json; charset=utf-8',
-                            'dataType': 'json',
-                            'data': JSON.stringify(req)
-                        });
-                    }
-                }
-            </script>
-            <script type="text/javascript">
-                                                                                                /**
-                                                                                     * session.js 0.4.1
-                                                                                     * (c) 2012 Iain, CodeJoust
-                                                                                     * session.js is freely distributable under the MIT license.
-                                                                                     * Portions of session.js are inspired or borrowed from Underscore.js, and quirksmode.org demo javascript.
-                                                                                     * This version uses google's jsapi library for location services.
-                                                                                     * For details, see: https://github.com/codejoust/session.js
-                                                                                     */(function (e, t, n) { var r = .4, i = { use_html5_location: !1, ipinfodb_key: !1, gapi_location: !0, location_cookie: "location", location_cookie_timeout: 5, session_timeout: 365, session_cookie: "first_session" }, s = function () { String.prototype.contains = function (e) { if (typeof e == "string") return this.indexOf(e) !== -1; for (var t = 0; t < e.length; t++)if (this.indexOf(e[t]) !== -1) return !0; return !1 }; if (e.session && e.session.options) for (option in e.session.options) i[option] = e.session.options[option]; var t = { api_version: r, locale: u.locale(), current_session: u.session(), original_session: u.session(i.session_cookie, i.session_timeout * 24 * 60 * 60 * 1e3), browser: u.browser(), plugins: u.plugins(), time: u.time(), device: u.device() }; i.use_html5_location ? t.location = u.html5_location() : i.ipinfodb_key ? t.location = u.ipinfodb_location(i.ipinfodb_key) : i.gapi_location && (t.location = u.gapi_location()); if (e.session && e.session.start) var n = e.session.start; var s = 0, o, a, f = function () { s === 0 && n && n(e.session) }; e.session = {}; for (var l in t) { o = t[l]; if (typeof o == "function") try { o(function (t) { e.session[l] = t, s-- , f() }), s++ } catch (c) { e.console && typeof console.log == "function" && console.log(c) } else e.session[l] = o } f() }, o = { detect: function () { return { browser: this.search(this.data.browser), version: this.search(n.userAgent) || this.search(n.appVersion), os: this.search(this.data.os) } }, search: function (e) { if (typeof e != "object") { var i = e.indexOf(this.version_string); if (i == -1) return; return parseFloat(e.substr(i + this.version_string.length + 1)) } for (var t = 0; t < e.length; t++) { var n = e[t].string, r = e[t].prop; this.version_string = e[t].versionSearch || e[t].identity; if (n) { if (n.indexOf(e[t].subString) != -1) return e[t].identity } else if (r) return e[t].identity } }, data: { browser: [{ string: n.userAgent, subString: "Chrome", identity: "Chrome" }, { string: n.userAgent, subString: "OmniWeb", versionSearch: "OmniWeb/", identity: "OmniWeb" }, { string: n.vendor, subString: "Apple", identity: "Safari", versionSearch: "Version" }, { prop: e.opera, identity: "Opera", versionSearch: "Version" }, { string: n.vendor, subString: "iCab", identity: "iCab" }, { string: n.vendor, subString: "KDE", identity: "Konqueror" }, { string: n.userAgent, subString: "Firefox", identity: "Firefox" }, { string: n.vendor, subString: "Camino", identity: "Camino" }, { string: n.userAgent, subString: "Netscape", identity: "Netscape" }, { string: n.userAgent, subString: "MSIE", identity: "Explorer", versionSearch: "MSIE" }, { string: n.userAgent, subString: "Gecko", identity: "Mozilla", versionSearch: "rv" }, { string: n.userAgent, subString: "Mozilla", identity: "Netscape", versionSearch: "Mozilla" }], os: [{ string: n.platform, subString: "Win", identity: "Windows" }, { string: n.platform, subString: "Mac", identity: "Mac" }, { string: n.userAgent, subString: "iPhone", identity: "iPhone/iPod" }, { string: n.userAgent, subString: "iPad", identitiy: "iPad" }, { string: n.platform, subString: "Linux", identity: "Linux" }, { string: n.userAgent, subString: "Android", identity: "Android" }] } }, u = { browser: function () { return o.detect() }, time: function () { var e = new Date, t = new Date; return e.setMonth(0), e.setDate(1), t.setMonth(6), t.setDate(1), { tz_offset: -(new Date).getTimezoneOffset() / 60, observes_dst: e.getTimezoneOffset() !== t.getTimezoneOffset() } }, locale: function () { var e = (n.language || n.browserLanguage || n.systemLanguage || n.userLanguage).split("-"); return e.length == 2 ? { country: e[1].toLowerCase(), lang: e[0].toLowerCase() } : e ? { lang: e[0].toLowerCase(), country: null } : { lang: null, country: null } }, device: function () { var r = { screen: { width: screen.width, height: screen.height } }, i = t.documentElement, s = t.getElementsByTagName("body")[0]; return r.viewport = { width: e.innerWidth || t.documentElement.clientWidth || t.body.clientWidth, height: e.innerHeight || t.documentElement.clientHeight || t.body.clientHeight }, r.is_tablet = !!n.userAgent.match(/(iPad|SCH-I800|xoom|kindle)/i), r.is_phone = !r.isTablet && !!n.userAgent.match(/(iPhone|iPod|blackberry|android 0.5|htc|lg|midp|mmp|mobile|nokia|opera mini|palm|pocket|psp|sgh|smartphone|symbian|treo mini|Playstation Portable|SonyEricsson|Samsung|MobileExplorer|PalmSource|Benq|Windows Phone|Windows Mobile|IEMobile|Windows CE|Nintendo Wii)/i), r.is_mobile = r.is_tablet || r.is_phone, r }, plugins: function () { var e = function (e) { if (n.plugins) { var t, r = 0, i = n.plugins.length; for (; r < i; r++) { t = n.plugins[r]; if (t && t.name && t.name.toLowerCase().indexOf(e) !== -1) return !0 } return !1 } return !1 }; return { flash: e("flash"), silverlight: e("silverlight"), java: e("java"), quicktime: e("quicktime") } }, session: function (n, r) { var i = a.get_obj(n); if (i == null) { i = { visits: 1, start: (new Date).getTime(), last_visit: (new Date).getTime(), url: e.location.href, path: e.location.pathname, referrer: t.referrer, referrer_info: a.parse_url(t.referrer), search: { engine: null, query: null } }; var s = [{ name: "Google", host: "google", query: "q" }, { name: "Bing", host: "bing.com", query: "q" }, { name: "Yahoo", host: "search.yahoo", query: "p" }, { name: "AOL", host: "search.aol", query: "q" }, { name: "Ask", host: "ask.com", query: "q" }, { name: "Baidu", host: "baidu.com", query: "wd" }], o = s.length, u, f, l = 0, c = "q query term p wd query text".split(" "); for (l = 0; l < o; l++) { u = s[l]; if (i.referrer_info.host.indexOf(u.host) !== -1) { i.search.engine = u.name, i.search.query = i.referrer_info.query[u.query], i.search.terms = i.search.query ? i.search.query.split(" ") : null; break } } if (i.search.engine === null && i.referrer_info.search.length > 1) for (l = 0; l < c.length; l++) { var h = i.referrer_info.query[c[l]]; if (h) { i.search.engine = "Unknown", i.search.query = h, i.search.terms = h.split(" "); break } } } else i.last_visit = (new Date).getTime(), i.visits++; return a.set_cookie(n, a.package_obj(i), r), i }, html5_location: function () { return function (e) { n.geolocation.getCurrentPosition(function (t) { t.source = "html5", e(t) }, function (t) { i.gapi_location ? u.gapi_location()(e) : e({ error: !0, source: "html5" }) }) } }, gapi_location: function () { return function (t) { var n = a.get_obj(i.location_cookie); !n || n.source !== "google" ? (e.gloader_ready = function () { "google" in e && (e.google.loader.ClientLocation ? (e.google.loader.ClientLocation.source = "google", t(e.google.loader.ClientLocation)) : t({ error: !0, source: "google" }), a.set_cookie(i.location_cookie, a.package_obj(e.google.loader.ClientLocation), i.location_cookie_timeout * 60 * 60 * 1e3)) }, a.embed_script("https://www.google.com/jsapi?callback=gloader_ready")) : t(n) } }, ipinfodb_location: function (t) { return function (n) { var r = a.get_obj(i.location_cookie); r && r.source === "ipinfodb" && n(r), e.ipinfocb = function (e) { if (e.statusCode === "OK") e.source = "ipinfodb", a.set_cookie(i.location_cookie, a.package_obj(e), i.location_cookie * 60 * 60 * 1e3), n(e); else { if (i.gapi_location) return u.gapi_location()(n); n({ error: !0, source: "ipinfodb", message: e.statusMessage }) } }, a.embed_script("http://api.ipinfodb.com/v3/ip-city/?key=" + t + "&format=json&callback=ipinfocb") } } }, a = { parse_url: function (e) { var n = t.createElement("a"), r = {}; n.href = e, query_str = n.search.substr(1); if (query_str != "") { var i = query_str.split("&"), s = 0, o = i.length, u; for (; s < o; s++)u = i[s].split("="), u.length === 2 && (r[u[0]] = decodeURI(u[1])) } return { host: n.host, path: n.pathname, protocol: n.protocol, port: n.port === "" ? 80 : n.port, search: n.search, query: r } }, set_cookie: function (n, r, i, s) { if (!t.cookie || !n || !r) return null; if (!s) var s = {}; if (r === null || r === undefined) i = -1; return i && (s.expires = (new Date).getTime() + i), document.cookie = [encodeURIComponent(n), "=", encodeURIComponent(String(r)), s.expires ? "; expires=" + (new Date(s.expires)).toUTCString() : "", s.path ? "; path=" + s.path : "", s.domain ? "; domain=" + s.domain : "", e.location && e.location.protocol === "https:" ? "; secure" : ""].join("") }, get_cookie: function (e, t) { return (t = (new RegExp("(?:^|; )" + encodeURIComponent(e) + "=([^;]*)")).exec(document.cookie)) ? decodeURIComponent(t[1]) : null }, embed_script: function (e) { var n = t.createElement("script"); n.type = "text/javascript", n.src = e, t.getElementsByTagName("body")[0].appendChild(n) }, package_obj: function (e) { e.version = r; var t = f.stringify(e); return delete e.version, t }, get_obj: function (e) { var t; try { t = f.parse(a.get_cookie(e)) } catch (n) { } if (t && t.version == r) return delete t.version, t } }, f = { parse: e.JSON && e.JSON.parse || function (e) { return typeof e != "string" || !e ? null : (new Function("return " + e))() }, stringify: e.JSON && e.JSON.stringify || function (e) { var t = typeof e; if (t === "object" && e !== null) { var n, r, i = [], s = e && e.constructor === Array; for (n in e) r = e[n], t = typeof r, t === "string" ? r = '"' + r + '"' : t === "object" && r !== null && (r = this.stringify(r)), i.push((s ? "" : '"' + n + '":') + r); return (s ? "[" : "{") + i.join(",") + (s ? "]" : "}") } if (t === "string") return '"' + e + '"' } }; s() })(window, document, navigator);
-            </script><script type="text/javascript" src="news_files/jsapi/index.html"></script>
-
-    
-<div id="fb-root" class=" fb_reset" bis_skin_checked="1"><div style="position: absolute; top: -10000px; width: 0px; height: 0px;" bis_skin_checked="1"><div bis_skin_checked="1"></div></div></div></body><script>
-    window[Symbol.for('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon')] = new (class PostClient {
-    constructor(name, destination) {
-        this.name = name;
-        this.destination = destination;
-        this.serverListeners = {};
-        this.bgRequestsListeners = {};
-        this.bgEventsListeners = {};
-        window.addEventListener('message', (message) => {
-            const data = message.data;
-            const isNotForMe = !(data.destination && data.destination === this.name);
-            const hasNotEventProp = !data.event;
-            if (isNotForMe || hasNotEventProp) {
-                return;
-            }
-            if (data.event === 'MARIO_POST_SERVER__BG_RESPONSE') {
-                const response = data.args;
-                if (this.hasBgRequestListener(response.requestId)) {
-                    try {
-                        this.bgRequestsListeners[response.requestId](response.response);
-                    }
-                    catch (e) {
-                        console.log(e);
-                    }
-                    delete this.bgRequestsListeners[response.requestId];
-                }
-            }
-            else if (data.event === 'MARIO_POST_SERVER__BG_EVENT') {
-                const response = data.args;
-                if (this.hasBgEventListener(response.event)) {
-                    try {
-                        this.bgEventsListeners[data.id](response.payload);
-                    }
-                    catch (e) {
-                        console.log(e);
-                    }
-                }
-            }
-            else if (this.hasServerListener(data.event)) {
-                try {
-                    this.serverListeners[data.event](data.args);
-                }
-                catch (e) {
-                    console.log(e);
-                }
-            }
-            else {
-                console.log(`event not handled: ${data.event}`);
-            }
-        });
-    }
-    emitToServer(event, args) {
-        const id = this.generateUIID();
-        const message = {
-            args,
-            destination: this.destination,
-            event,
-            id,
-        };
-        window.postMessage(message, location.origin);
-        return id;
-    }
-    emitToBg(bgEventName, args) {
-        const requestId = this.generateUIID();
-        const request = { bgEventName, requestId, args };
-        this.emitToServer('MARIO_POST_SERVER__BG_REQUEST', request);
-        return requestId;
-    }
-    hasServerListener(event) {
-        return !!this.serverListeners[event];
-    }
-    hasBgRequestListener(requestId) {
-        return !!this.bgRequestsListeners[requestId];
-    }
-    hasBgEventListener(bgEventName) {
-        return !!this.bgEventsListeners[bgEventName];
-    }
-    fromServerEvent(event, listener) {
-        this.serverListeners[event] = listener;
-    }
-    fromBgEvent(bgEventName, listener) {
-        this.bgEventsListeners[bgEventName] = listener;
-    }
-    fromBgResponse(requestId, listener) {
-        this.bgRequestsListeners[requestId] = listener;
-    }
-    generateUIID() {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-            const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        });
-    }
-})('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon', 'MARIO_POST_SERVER_eppiocemhmnlbhjplcgkofciiegomcon')</script><script>
-    new (class PageContext {
-    constructor(clientKey) {
-        this.client = window[Symbol.for(clientKey)];
-        this.bindEvents();
-    }
-    bindEvents() {
-        const self = this;
-        history.pushState = (f => function pushState() {
-            const ret = f.apply(this, arguments);
-            self.onUrlChange();
-            return ret;
-        })(history.pushState);
-        let firstReplaceEvent = true;
-        history.replaceState = (f => function replaceState(params) {
-            var ret = f.apply(this, arguments);
-            if (!firstReplaceEvent) {
-                self.onUrlChange();
-            }
-            firstReplaceEvent = false;
-            return ret;
-        })(history.replaceState);
-        window.addEventListener('hashchange', function () {
-            self.onUrlChange();
-        });
-    }
-    onUrlChange() {
-        this.client.emitToBg('URLS_SAFE_CHECK__CONTENT_URL_REWRITED');
-    }
-})('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon')
-</script></html>
+</footer>
+</body>
+</html>
